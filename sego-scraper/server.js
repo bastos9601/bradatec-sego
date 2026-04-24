@@ -267,12 +267,30 @@ async function ejecutarScraping(username, password, userId) {
       
       if (!error && data && data.cookies) {
         console.log('✅ Sesión encontrada, usando cookies guardadas');
-        await page.setCookie(...data.cookies);
-        usandoSesionGuardada = true;
         
-        // Ir directo a la tienda
+        // 1. Ir a página base primero
+        await page.goto('https://www.sego.com.pe', {
+          waitUntil: 'domcontentloaded'
+        });
+        
+        // 2. Cargar cookies
+        await page.setCookie(...data.cookies);
+        
+        // 3. 🔥 Recargar con sesión aplicada (CLAVE)
         await page.goto('https://www.sego.com.pe/shop', {
           waitUntil: 'networkidle2'
+        });
+        
+        usandoSesionGuardada = true;
+        
+        // Aceptar cookies si aparece banner
+        await page.evaluate(() => {
+          const btns = document.querySelectorAll('button');
+          btns.forEach(btn => {
+            if (btn.innerText && btn.innerText.includes('Acepto')) {
+              btn.click();
+            }
+          });
         });
         
         // Verificar que sigue logueado
@@ -280,12 +298,23 @@ async function ejecutarScraping(username, password, userId) {
           return !!document.querySelector('.o_user_menu, .dropdown-toggle');
         });
         
+        console.log('🧪 Está logueado:', sigueLogueado);
+        
         if (!sigueLogueado) {
           console.log('⚠️ Sesión expirada, haciendo login nuevamente...');
           usandoSesionGuardada = false;
         } else {
           console.log('✅ Sesión válida, continuando scraping...');
           progreso.categoriaActual = 'Sesión restaurada';
+          
+          // Debug: contar productos visibles
+          const count = await page.evaluate(() => {
+            return document.querySelectorAll('[itemtype*="Product"]').length;
+          });
+          console.log('🧪 Productos detectados en página inicial:', count);
+          
+          // Screenshot debug
+          await page.screenshot({ path: 'debug-session-loaded.png', fullPage: true });
         }
       }
     }
@@ -386,6 +415,19 @@ async function ejecutarScraping(username, password, userId) {
         
         // Más rápido: domcontentloaded en vez de networkidle2
         await page.goto(url, { waitUntil: 'domcontentloaded' });
+        
+        // 🔥 ESPERAR A QUE LOS PRODUCTOS SE CARGUEN
+        try {
+          await page.waitForSelector('[itemtype*="Product"]', { timeout: 15000 });
+          console.log('✅ Productos detectados en página');
+        } catch (e) {
+          console.log('⚠️ No se detectaron productos, intentando con selector alternativo...');
+          try {
+            await page.waitForSelector('.oe_product_cart', { timeout: 10000 });
+          } catch (e2) {
+            console.log('⚠️ Selector alternativo tampoco funcionó, continuando...');
+          }
+        }
         
         try {
           await page.waitForSelector('.oe_currency_value', { timeout: 15000 });
@@ -508,6 +550,15 @@ async function ejecutarScraping(username, password, userId) {
         progreso.productosEncontrados = todosLosProductos.length;
         
         console.log(`✓ Encontrados: ${productos.length} productos (Total: ${todosLosProductos.length})`);
+        
+        // 🔥 DEBUG: Si no se encontraron productos, tomar screenshot
+        if (productos.length === 0) {
+          console.log('⚠️ No se encontraron productos en esta página, tomando screenshot...');
+          await page.screenshot({ 
+            path: `debug-no-products-${categoria.nombre.replace(/[^a-z0-9]/gi, '-')}-p${pagina}.png`, 
+            fullPage: true 
+          });
+        }
       }
     }
 

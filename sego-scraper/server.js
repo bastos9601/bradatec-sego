@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import { createClient } from '@supabase/supabase-js';
 
 const app = express();
@@ -98,28 +99,13 @@ async function ejecutarScraping(username, password) {
   console.log('🚀 Iniciando scraping de Sego...');
   console.log('👤 Usuario:', username);
   
-  // Detectar el path de Chromium en Railway/Nix
-  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || 
-                         '/nix/store/*-chromium-*/bin/chromium' ||
-                         undefined;
-  
-  console.log('📍 Chromium path:', executablePath);
+  console.log('📍 Usando @sparticuz/chromium para Railway');
   
   const browser = await puppeteer.launch({
-    headless: true, // Modo headless para servidores sin GUI
-    executablePath: executablePath,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--disable-software-rasterizer',
-      '--disable-dev-tools',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process'
-    ],
-    defaultViewport: { width: 1280, height: 800 }
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless
   });
 
   try {

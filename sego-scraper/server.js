@@ -119,12 +119,25 @@ async function ejecutarScraping(username, password) {
     // Esperar a que cargue el formulario
     await page.waitForSelector('input[name="login"]', { timeout: 10000 });
     
+    // Esperar a que el JS de la página termine de cargar
+    await page.waitForTimeout(2000);
+    
     // Llenar formulario de login con las credenciales recibidas
     await page.type('input[name="login"]', username);
     await page.type('input[name="password"]', password);
     
-    // Hacer clic en el botón de login
-    await page.click('button[type="submit"]');
+    // Esperar a que el botón esté visible y hacer clic de forma robusta
+    await page.waitForSelector('button[type="submit"]', { visible: true });
+    
+    const boton = await page.$('button[type="submit"]');
+    if (boton) {
+      console.log('✓ Botón de login encontrado, haciendo clic...');
+      await boton.evaluate(b => b.click());
+    } else {
+      // Intentar con selector alternativo
+      console.log('⚠️ Intentando con selector alternativo .btn-primary');
+      await page.click('.btn-primary');
+    }
     
     progreso.categoriaActual = 'Iniciando sesión...';
     

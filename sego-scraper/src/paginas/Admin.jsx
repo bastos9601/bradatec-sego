@@ -485,7 +485,7 @@ export default function Admin() {
     setMensaje('Iniciando scraping de Sego...');
 
     try {
-      const response = await fetch('http://localhost:3001/api/scrape', {
+      const response = await fetch('https://bradatec-sego.onrender.com/api/scrape', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -500,7 +500,7 @@ export default function Admin() {
         
         const intervalo = setInterval(async () => {
           try {
-            const progresoResponse = await fetch('http://localhost:3001/api/scrape/progreso');
+            const progresoResponse = await fetch('https://bradatec-sego.onrender.com/api/scrape/progreso');
             const progresoData = await progresoResponse.json();
             
             if (progresoData.enProgreso) {

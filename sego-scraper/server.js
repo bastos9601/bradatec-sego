@@ -105,6 +105,11 @@ app.post('/api/conectar-sego', async (req, res) => {
     // Guardar cookies
     const cookies = await page.cookies();
     
+    console.log('💾 Guardando cookies:', cookies.length, 'cookies encontradas');
+    console.log('🔑 Cookies importantes:', cookies.filter(c => 
+      c.name.includes('session') || c.name.includes('token') || c.name.includes('auth')
+    ).map(c => c.name));
+    
     // Guardar en Supabase
     const { error } = await supabase
       .from('sego_sessions')
@@ -243,19 +248,27 @@ async function ejecutarScraping(username, password, userId) {
       });
     });
     
-    // Bloquear recursos pesados (2-3x más rápido)
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const resourceType = req.resourceType();
-      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
+    // 🔥 IMPORTANTE: NO bloquear recursos cuando usamos sesiones
+    // Las cookies pueden no funcionar correctamente sin CSS/JS
+    if (!userId) {
+      // Solo bloquear recursos si NO hay sesión guardada (login nuevo)
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        const resourceType = req.resourceType();
+        if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+          req.abort();
+        } else {
+          req.continue();
+        }
+      });
+      console.log('⚡ Bloqueando recursos pesados para login más rápido');
+    } else {
+      console.log('📦 Permitiendo todos los recursos para sesión guardada');
+    }
     
     // Intentar usar sesión guardada primero
     let usandoSesionGuardada = false;
+    let sesionValida = false;
     
     if (userId) {
       console.log('🔍 Buscando sesión guardada...');
@@ -265,61 +278,68 @@ async function ejecutarScraping(username, password, userId) {
         .eq('user_id', userId)
         .single();
       
-      if (!error && data && data.cookies) {
-        console.log('✅ Sesión encontrada, usando cookies guardadas');
+      if (!error && data && data.cookies && data.cookies.length > 0) {
+        console.log('✅ Sesión encontrada, intentando usar cookies guardadas');
+        console.log('🔧 Cookies a cargar:', data.cookies.length);
         
-        // 1. Ir a página base primero
-        await page.goto('https://www.sego.com.pe', {
-          waitUntil: 'domcontentloaded'
-        });
-        
-        // 2. Cargar cookies
-        await page.setCookie(...data.cookies);
-        
-        // 3. 🔥 Recargar con sesión aplicada (CLAVE)
-        await page.goto('https://www.sego.com.pe/shop', {
-          waitUntil: 'networkidle2'
-        });
-        
-        usandoSesionGuardada = true;
-        
-        // Aceptar cookies si aparece banner
-        await page.evaluate(() => {
-          const btns = document.querySelectorAll('button');
-          btns.forEach(btn => {
-            if (btn.innerText && btn.innerText.includes('Acepto')) {
-              btn.click();
-            }
+        try {
+          // 1. Ir a página base primero
+          await page.goto('https://www.sego.com.pe', {
+            waitUntil: 'domcontentloaded',
+            timeout: 60000
           });
-        });
-        
-        // Verificar que sigue logueado
-        const sigueLogueado = await page.evaluate(() => {
-          return !!document.querySelector('.o_user_menu, .dropdown-toggle');
-        });
-        
-        console.log('🧪 Está logueado:', sigueLogueado);
-        
-        if (!sigueLogueado) {
-          console.log('⚠️ Sesión expirada, haciendo login nuevamente...');
-          usandoSesionGuardada = false;
-        } else {
-          console.log('✅ Sesión válida, continuando scraping...');
-          progreso.categoriaActual = 'Sesión restaurada';
           
-          // Debug: contar productos visibles
+          console.log('📍 En página base, cargando cookies...');
+          
+          // 2. Cargar cookies
+          await page.setCookie(...data.cookies);
+          
+          // Esperar a que las cookies se apliquen
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          console.log('🔄 Cookies cargadas, navegando a tienda...');
+          
+          // 3. Ir a categoría CCTV para verificar
+          await page.goto('https://www.sego.com.pe/shop/category/cctv-108', {
+            waitUntil: 'domcontentloaded',
+            timeout: 60000
+          });
+          
+          console.log('📍 En página de categoría CCTV');
+          
+          // Esperar a que productos se carguen
+          try {
+            await page.waitForSelector('[itemtype*="Product"]', { timeout: 15000 });
+            console.log('✅ Selector de productos encontrado');
+          } catch (e) {
+            console.log('⚠️ Selector de productos no encontrado, esperando más...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          }
+          
+          // Contar productos
           const count = await page.evaluate(() => {
             return document.querySelectorAll('[itemtype*="Product"]').length;
           });
-          console.log('🧪 Productos detectados en página inicial:', count);
+          console.log('🧪 Productos detectados:', count);
           
-          // Screenshot debug
-          await page.screenshot({ path: 'debug-session-loaded.png', fullPage: true });
+          if (count > 0) {
+            console.log('✅ Sesión válida, productos detectados correctamente');
+            usandoSesionGuardada = true;
+            sesionValida = true;
+            progreso.categoriaActual = 'Sesión restaurada';
+          } else {
+            console.log('⚠️ Sesión no válida (0 productos), haciendo login nuevamente...');
+            usandoSesionGuardada = false;
+          }
+          
+        } catch (e) {
+          console.log('❌ Error al usar sesión guardada:', e.message);
+          usandoSesionGuardada = false;
         }
       }
     }
     
-    // Si no hay sesión guardada o expiró, hacer login
+    // Si no hay sesión guardada o no funcionó, hacer login
     if (!usandoSesionGuardada) {
       if (!username || !password) {
         throw new Error('Se requieren credenciales para hacer login');
@@ -364,17 +384,28 @@ async function ejecutarScraping(username, password, userId) {
       
       // Guardar cookies para próxima vez (si tenemos userId)
       if (userId) {
-        const cookies = await page.cookies();
-        await supabase
-          .from('sego_sessions')
-          .upsert({
-            user_id: userId,
-            email: username,
-            cookies: cookies
-          }, {
-            onConflict: 'user_id'
-          });
-        console.log('💾 Cookies guardadas para próxima vez');
+        try {
+          const cookies = await page.cookies();
+          console.log('💾 Guardando', cookies.length, 'cookies...');
+          
+          const { error } = await supabase
+            .from('sego_sessions')
+            .upsert({
+              user_id: userId,
+              email: username,
+              cookies: cookies
+            }, {
+              onConflict: 'user_id'
+            });
+          
+          if (error) {
+            console.error('⚠️ Error guardando cookies:', error);
+          } else {
+            console.log('✅ Cookies guardadas correctamente para próxima vez');
+          }
+        } catch (e) {
+          console.error('❌ Error al guardar cookies:', e.message);
+        }
       }
     }
 

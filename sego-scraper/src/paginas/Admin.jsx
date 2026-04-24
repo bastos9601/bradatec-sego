@@ -485,7 +485,7 @@ export default function Admin() {
     setMensaje('Iniciando scraping de Sego...');
 
     try {
-      const response = await fetch('https://bradatec-sego.onrender.com/api/scrape', {
+      const response = await fetch('https://capable-nature-production-7d18.up.railway.app/api/scrape', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -500,7 +500,7 @@ export default function Admin() {
         
         const intervalo = setInterval(async () => {
           try {
-            const progresoResponse = await fetch('https://bradatec-sego.onrender.com/api/scrape/progreso');
+            const progresoResponse = await fetch('https://capable-nature-production-7d18.up.railway.app/api/scrape/progreso');
             const progresoData = await progresoResponse.json();
             
             if (progresoData.enProgreso) {
@@ -593,30 +593,25 @@ export default function Admin() {
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h3 className="text-xl font-semibold mb-4">Gestionar Productos</h3>
               
-              <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-4">
-                <p className="text-sm text-yellow-800 mb-2">
-                  <strong>⚠️ Importante:</strong> El scraping automático desde el navegador no está disponible actualmente.
+              <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
+                <p className="text-sm text-green-800 mb-2">
+                  <strong>✅ Servidor en línea:</strong> Railway configurado correctamente
                 </p>
-                <p className="text-sm text-yellow-800">
-                  <strong>✅ Solución:</strong> Para importar productos de Sego, ejecuta en tu terminal:
+                <p className="text-sm text-green-700">
+                  Ahora puedes importar productos directamente desde el panel admin usando el botón "Importar Productos Sego".
                 </p>
-                <code className="block bg-gray-800 text-green-400 p-2 rounded mt-2 text-sm">
-                  cd sego-scraper<br/>
-                  node scraper-local.js
-                </code>
-                <p className="text-xs text-yellow-700 mt-2">
-                  Se abrirá un navegador donde podrás hacer login manualmente y scrapear todos los productos.
+                <p className="text-xs text-green-600 mt-2">
+                  URL del servidor: capable-nature-production-7d18.up.railway.app
                 </p>
               </div>
               
               <div className="flex gap-4 flex-wrap">
                 <button
                   onClick={importarProductosSego}
-                  disabled={true}
-                  className="bg-gray-400 cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg transition opacity-50"
-                  title="Usa el scraper local en tu terminal: node scraper-local.js"
+                  disabled={loading}
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition disabled:opacity-50"
                 >
-                  📦 Importar Productos Sego (No disponible)
+                  {loading ? 'Importando...' : '📦 Importar Productos Sego'}
                 </button>
 
                 <button

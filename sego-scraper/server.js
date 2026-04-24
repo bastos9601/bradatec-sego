@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer';
 import { createClient } from '@supabase/supabase-js';
 
 const app = express();
@@ -99,13 +98,15 @@ async function ejecutarScraping(username, password) {
   console.log('🚀 Iniciando scraping de Sego...');
   console.log('👤 Usuario:', username);
   
-  console.log('📍 Usando @sparticuz/chromium para Railway');
-  
   const browser = await puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath(),
-    headless: chromium.headless
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu'
+    ]
   });
 
   try {

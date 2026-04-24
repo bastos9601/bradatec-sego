@@ -1,6 +1,27 @@
-# Configuración para Railway con @sparticuz/chromium
+# Configuración para Railway con librerías necesarias para Chromium
 [phases.setup]
-nixPkgs = ['nodejs_20']
+nixPkgs = [
+  'nodejs_20',
+  'nss',
+  'nspr',
+  'atk',
+  'at-spi2-atk',
+  'cups',
+  'dbus',
+  'libdrm',
+  'gtk3',
+  'pango',
+  'cairo',
+  'xorg.libX11',
+  'xorg.libXcomposite',
+  'xorg.libXdamage',
+  'xorg.libXext',
+  'xorg.libXfixes',
+  'xorg.libXrandr',
+  'mesa',
+  'expat',
+  'alsa-lib'
+]
 
 [phases.install]
 cmds = ['npm install']

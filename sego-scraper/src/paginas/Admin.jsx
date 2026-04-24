@@ -27,6 +27,11 @@ export default function Admin() {
   const [mostrarModalPorcentaje, setMostrarModalPorcentaje] = useState(false)
   const [porcentajeAjuste, setPorcentajeAjuste] = useState(15)
   const [pedidoDetalle, setPedidoDetalle] = useState(null)
+  const [mostrarModalCredenciales, setMostrarModalCredenciales] = useState(false)
+  const [credencialesSego, setCredencialesSego] = useState({
+    username: '',
+    password: ''
+  })
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -481,8 +486,15 @@ export default function Admin() {
   }
 
   const importarProductosSego = async () => {
+    // Validar que se hayan ingresado las credenciales
+    if (!credencialesSego.username || !credencialesSego.password) {
+      setMostrarModalCredenciales(true);
+      return;
+    }
+
     setLoading(true);
     setMensaje('Iniciando scraping de Sego...');
+    setMostrarModalCredenciales(false);
 
     try {
       const response = await fetch('https://capable-nature-production-7d18.up.railway.app/api/scrape', {
@@ -490,6 +502,10 @@ export default function Admin() {
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          username: credencialesSego.username,
+          password: credencialesSego.password
+        })
       });
 
       const result = await response.json();
@@ -1359,6 +1375,64 @@ export default function Admin() {
                     Cerrar
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal para ingresar credenciales de Sego */}
+        {mostrarModalCredenciales && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-md w-full p-6">
+              <h3 className="text-xl font-bold mb-4 text-gray-800">Credenciales de Sego</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Ingresa tus credenciales de Sego para iniciar el scraping automático.
+              </p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-2">Email / Usuario</label>
+                  <input
+                    type="text"
+                    value={credencialesSego.username}
+                    onChange={(e) => setCredencialesSego({...credencialesSego, username: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="tu-email@ejemplo.com"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-2">Contraseña</label>
+                  <input
+                    type="password"
+                    value={credencialesSego.password}
+                    onChange={(e) => setCredencialesSego({...credencialesSego, password: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="••••••••"
+                  />
+                </div>
+                
+                <div className="bg-yellow-50 border-l-4 border-yellow-500 p-3">
+                  <p className="text-xs text-yellow-800">
+                    🔒 Tus credenciales se envían de forma segura al servidor y NO se guardan.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={importarProductosSego}
+                  disabled={!credencialesSego.username || !credencialesSego.password}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Iniciar Scraping
+                </button>
+                <button
+                  onClick={() => setMostrarModalCredenciales(false)}
+                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition"
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           </div>

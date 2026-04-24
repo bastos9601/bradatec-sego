@@ -55,6 +55,15 @@ app.post('/api/scrape', async (req, res) => {
     });
   }
 
+  // Obtener credenciales del request body
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({ 
+      error: 'Se requieren credenciales de Sego (username y password)' 
+    });
+  }
+
   scrapingEnProgreso = true;
   progreso = {
     categoriaActual: 'Iniciando...',
@@ -70,8 +79,8 @@ app.post('/api/scrape', async (req, res) => {
     status: 'en_progreso'
   });
 
-  // Ejecutar scraping en background
-  ejecutarScraping().catch(error => {
+  // Ejecutar scraping en background con las credenciales proporcionadas
+  ejecutarScraping(username, password).catch(error => {
     console.error('Error en scraping:', error);
     scrapingEnProgreso = false;
   });
@@ -85,8 +94,9 @@ app.get('/api/scrape/progreso', (req, res) => {
   });
 });
 
-async function ejecutarScraping() {
+async function ejecutarScraping(username, password) {
   console.log('🚀 Iniciando scraping de Sego...');
+  console.log('👤 Usuario:', username);
   
   // Detectar el path de Chromium en Railway/Nix
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || 
@@ -115,16 +125,16 @@ async function ejecutarScraping() {
   try {
     const page = await browser.newPage();
     
-    // Login AUTOMÁTICO en Sego
+    // Login AUTOMÁTICO en Sego con credenciales proporcionadas
     console.log('🔐 Iniciando sesión en Sego...');
     await page.goto('https://www.sego.com.pe/web/login', { waitUntil: 'networkidle2' });
     
     // Esperar a que cargue el formulario
     await page.waitForSelector('input[name="login"]', { timeout: 10000 });
     
-    // Llenar formulario de login
-    await page.type('input[name="login"]', SEGO_USERNAME);
-    await page.type('input[name="password"]', SEGO_PASSWORD);
+    // Llenar formulario de login con las credenciales recibidas
+    await page.type('input[name="login"]', username);
+    await page.type('input[name="password"]', password);
     
     // Hacer clic en el botón de login
     await page.click('button[type="submit"]');

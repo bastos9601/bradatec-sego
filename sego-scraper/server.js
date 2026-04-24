@@ -120,7 +120,7 @@ async function ejecutarScraping(username, password) {
     await page.waitForSelector('input[name="login"]', { timeout: 10000 });
     
     // Esperar a que el JS de la página termine de cargar
-    await page.waitForTimeout(2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     // Llenar formulario de login con las credenciales recibidas
     await page.type('input[name="login"]', username);

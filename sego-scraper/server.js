@@ -6,8 +6,20 @@ import { createClient } from '@supabase/supabase-js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Configurar CORS para permitir peticiones desde Netlify
+const corsOptions = {
+  origin: [
+    'https://bradatec.netlify.app',
+    'http://localhost:5173', // Para desarrollo local
+    'http://localhost:3000'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Ruta raíz para verificar que el servidor está funcionando

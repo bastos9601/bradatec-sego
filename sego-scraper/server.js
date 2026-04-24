@@ -88,13 +88,26 @@ app.get('/api/scrape/progreso', (req, res) => {
 async function ejecutarScraping() {
   console.log('🚀 Iniciando scraping de Sego...');
   
+  // Detectar el path de Chromium en Railway/Nix
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || 
+                         '/nix/store/*-chromium-*/bin/chromium' ||
+                         undefined;
+  
+  console.log('📍 Chromium path:', executablePath);
+  
   const browser = await puppeteer.launch({
     headless: true, // Modo headless para servidores sin GUI
+    executablePath: executablePath,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
-      '--disable-gpu'
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--disable-dev-tools',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process'
     ],
     defaultViewport: { width: 1280, height: 800 }
   });

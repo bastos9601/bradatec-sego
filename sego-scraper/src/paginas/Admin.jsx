@@ -593,25 +593,37 @@ export default function Admin() {
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h3 className="text-xl font-semibold mb-4">Gestionar Productos</h3>
               
-              <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
-                <p className="text-sm text-green-800 mb-2">
-                  <strong>✅ Servidor en línea:</strong> Railway configurado correctamente
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
+                <p className="text-sm text-blue-800 mb-2">
+                  <strong>💡 Cómo importar productos de Sego:</strong>
                 </p>
-                <p className="text-sm text-green-700">
-                  Ahora puedes importar productos directamente desde el panel admin usando el botón "Importar Productos Sego".
+                <p className="text-sm text-blue-700 mb-2">
+                  El scraping requiere un navegador con interfaz gráfica, por lo que debes ejecutarlo en tu computadora.
                 </p>
-                <p className="text-xs text-green-600 mt-2">
-                  URL del servidor: capable-nature-production-7d18.up.railway.app
+                <div className="bg-white p-3 rounded mt-2 mb-2">
+                  <p className="text-sm font-semibold text-gray-800 mb-1">Opción 1: Doble clic en el archivo</p>
+                  <code className="text-xs text-blue-600">sego-scraper/importar-productos.bat</code>
+                </div>
+                <div className="bg-white p-3 rounded">
+                  <p className="text-sm font-semibold text-gray-800 mb-1">Opción 2: Ejecutar en terminal</p>
+                  <code className="block bg-gray-800 text-green-400 p-2 rounded text-xs">
+                    cd sego-scraper<br/>
+                    node scraper-local.js
+                  </code>
+                </div>
+                <p className="text-xs text-blue-600 mt-2">
+                  ✓ Se abrirá Chrome donde podrás hacer login manualmente<br/>
+                  ✓ El scraping tomará 10-15 minutos<br/>
+                  ✓ Los productos se guardarán automáticamente en la base de datos
                 </p>
               </div>
               
               <div className="flex gap-4 flex-wrap">
                 <button
-                  onClick={importarProductosSego}
-                  disabled={loading}
-                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition disabled:opacity-50"
+                  onClick={() => alert('Para importar productos, ejecuta:\n\n1. Doble clic en: sego-scraper/importar-productos.bat\n\nO en terminal:\n\n2. cd sego-scraper\n3. node scraper-local.js\n\nSe abrirá Chrome donde podrás hacer login manualmente.')}
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition"
                 >
-                  {loading ? 'Importando...' : '📦 Importar Productos Sego'}
+                  📦 ¿Cómo importar productos?
                 </button>
 
                 <button

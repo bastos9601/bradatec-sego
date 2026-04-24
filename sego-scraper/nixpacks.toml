@@ -1,6 +1,6 @@
 # Configuración para Railway con soporte Puppeteer
 [phases.setup]
-nixPkgs = ['nodejs', 'chromium']
+nixPkgs = ['nodejs_20', 'chromium']
 
 [phases.install]
 cmds = ['npm install']
@@ -8,6 +8,7 @@ cmds = ['npm install']
 [start]
 cmd = 'node server.js'
 
-[env]
+[variables]
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true'
-PUPPETEER_EXECUTABLE_PATH = '/nix/store/*-chromium-*/bin/chromium'
+PUPPETEER_EXECUTABLE_PATH = '$(which chromium)'
+NODE_ENV = 'production'

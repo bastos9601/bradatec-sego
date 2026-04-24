@@ -112,47 +112,58 @@ async function ejecutarScraping(username, password) {
   try {
     const page = await browser.newPage();
     
-    // Login AUTOMÁTICO en Sego con credenciales proporcionadas
-    console.log('🔐 Iniciando sesión en Sego...');
-    await page.goto('https://www.sego.com.pe/web/login', { waitUntil: 'networkidle2' });
-    
-    // Esperar a que cargue el formulario
-    await page.waitForSelector('input[name="login"]', { timeout: 10000 });
-    
-    // Esperar a que el JS de la página termine de cargar
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Llenar formulario de login con las credenciales recibidas
-    await page.type('input[name="login"]', username);
-    await page.type('input[name="password"]', password);
-    
-    // Esperar a que el botón esté visible y hacer clic de forma robusta
-    await page.waitForSelector('button[type="submit"]', { visible: true });
-    
-    const boton = await page.$('button[type="submit"]');
-    if (boton) {
-      console.log('✓ Botón de login encontrado, haciendo clic...');
-      await boton.evaluate(b => b.click());
-    } else {
-      // Intentar con selector alternativo
-      console.log('⚠️ Intentando con selector alternativo .btn-primary');
-      await page.click('.btn-primary');
-    }
-    
-    progreso.categoriaActual = 'Iniciando sesión...';
-    
-    // Esperar a que se complete el login
-    await page.waitForFunction(
-      () => {
-        const loginForm = document.querySelector('input[name="login"]');
-        const userMenu = document.querySelector('.o_user_menu, .dropdown-toggle');
-        return !loginForm && userMenu;
-      },
-      { timeout: 30000 }
+    // Anti-bot: User Agent
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+      '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
     
-    console.log('✅ Sesión iniciada correctamente');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Ocultar que es bot
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false,
+      });
+    });
+    
+    // Bloquear recursos pesados (2-3x más rápido)
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const resourceType = req.resourceType();
+      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+    
+    // LOGIN 100% ESTABLE
+    console.log('🔐 Iniciando sesión en Sego...');
+    await page.goto('https://www.sego.com.pe/web/login', {
+      waitUntil: 'networkidle2'
+    });
+    
+    // Esperar inputs
+    await page.waitForSelector('input[name="login"]', { visible: true });
+    await page.waitForSelector('input[name="password"]', { visible: true });
+    
+    // Escribir lento (anti-bot)
+    await page.type('input[name="login"]', username, { delay: 50 });
+    await page.type('input[name="password"]', password, { delay: 50 });
+    
+    // Esperar botón
+    await page.waitForSelector('button[type="submit"]', { visible: true });
+    
+    // Click + navegación juntos (CLAVE)
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle2' }),
+      page.evaluate(() => {
+        const btn = document.querySelector('button[type="submit"]');
+        if (btn) btn.click();
+      })
+    ]);
+    
+    console.log('✅ Login completado');
+    progreso.categoriaActual = 'Login exitoso';
 
     let todosLosProductos = [];
 
@@ -188,14 +199,19 @@ async function ejecutarScraping(username, password) {
         const url = pagina === 1 ? categoria.url : `${categoria.url}/page/${pagina}`;
         
         console.log(`📦 Scrapeando página ${pagina}/${categoria.paginas}`);
-        await page.goto(url, { waitUntil: 'networkidle2' });
+        
+        // Más rápido: domcontentloaded en vez de networkidle2
+        await page.goto(url, { waitUntil: 'domcontentloaded' });
         
         try {
           await page.waitForSelector('.oe_currency_value', { timeout: 15000 });
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 1000));
         } catch (e) {
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
+        
+        // Delay inteligente (simula humano)
+        await new Promise(r => setTimeout(r, 1000 + Math.random() * 2000));
 
         const productos = await page.evaluate((categoriaNombre) => {
           const items = [];
@@ -312,31 +328,25 @@ async function ejecutarScraping(username, password) {
     }
 
     console.log(`\n📊 Total productos encontrados: ${todosLosProductos.length}`);
-    console.log('💾 Insertando en Supabase...');
+    console.log('💾 Insertando en Supabase (modo masivo)...');
 
-    let insertados = 0;
-    for (const producto of todosLosProductos) {
-      const { data: existente } = await supabase
-        .from('productos')
-        .select('id')
-        .eq('nombre', producto.nombre)
-        .single();
+    // Inserción masiva (10x más rápido)
+    const { data, error } = await supabase
+      .from('productos')
+      .upsert(todosLosProductos, { 
+        onConflict: 'nombre',
+        ignoreDuplicates: false 
+      });
 
-      if (!existente) {
-        const { error } = await supabase
-          .from('productos')
-          .insert([producto]);
-
-        if (!error) {
-          insertados++;
-          progreso.productosInsertados = insertados;
-        }
-      }
+    if (error) {
+      console.error('Error en inserción masiva:', error);
+      progreso.productosInsertados = 0;
+    } else {
+      progreso.productosInsertados = todosLosProductos.length;
+      console.log('✅ SCRAPING COMPLETADO');
+      console.log(`   📦 Total encontrados: ${todosLosProductos.length}`);
+      console.log(`   ✓ Insertados/Actualizados: ${todosLosProductos.length}`);
     }
-
-    console.log('✅ SCRAPING COMPLETADO');
-    console.log(`   📦 Total encontrados: ${todosLosProductos.length}`);
-    console.log(`   ✓ Insertados: ${insertados}`);
 
   } catch (error) {
     console.error('❌ Error durante el scraping:', error);

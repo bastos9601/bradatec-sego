@@ -46,6 +46,127 @@ let progreso = {
   productosInsertados: 0
 };
 
+// Endpoint para conectar cuenta de Sego (guardar cookies)
+app.post('/api/conectar-sego', async (req, res) => {
+  const { email, password, userId } = req.body;
+  
+  if (!email || !password || !userId) {
+    return res.status(400).json({ 
+      error: 'Se requieren email, password y userId' 
+    });
+  }
+
+  try {
+    console.log('🔐 Conectando cuenta de Sego...');
+    
+    const browser = await puppeteer.launch({
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
+    const page = await browser.newPage();
+    
+    // Anti-bot
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+      '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    );
+    
+    await page.goto('https://www.sego.com.pe/web/login', {
+      waitUntil: 'networkidle2'
+    });
+    
+    await page.waitForSelector('input[name="login"]', { visible: true });
+    await page.waitForSelector('input[name="password"]', { visible: true });
+    
+    await page.type('input[name="login"]', email, { delay: 50 });
+    await page.type('input[name="password"]', password, { delay: 50 });
+    
+    await page.waitForSelector('button[type="submit"]', { visible: true });
+    
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle2' }),
+      page.evaluate(() => {
+        const btn = document.querySelector('button[type="submit"]');
+        if (btn) btn.click();
+      })
+    ]);
+    
+    // Verificar que el login fue exitoso
+    const sigueLogueado = await page.evaluate(() => {
+      return !!document.querySelector('.o_user_menu, .dropdown-toggle');
+    });
+    
+    if (!sigueLogueado) {
+      await browser.close();
+      return res.status(401).json({ 
+        error: 'Credenciales incorrectas o login falló' 
+      });
+    }
+    
+    // Guardar cookies
+    const cookies = await page.cookies();
+    
+    // Guardar en Supabase
+    const { error } = await supabase
+      .from('sego_sessions')
+      .upsert({
+        user_id: userId,
+        email: email,
+        cookies: cookies
+      }, {
+        onConflict: 'user_id'
+      });
+    
+    await browser.close();
+    
+    if (error) {
+      console.error('Error guardando sesión:', error);
+      return res.status(500).json({ 
+        error: 'Error guardando sesión' 
+      });
+    }
+    
+    console.log('✅ Sesión de Sego guardada correctamente');
+    res.json({ 
+      ok: true,
+      message: 'Cuenta conectada exitosamente' 
+    });
+    
+  } catch (error) {
+    console.error('Error conectando Sego:', error);
+    res.status(500).json({ 
+      error: 'Error al conectar con Sego: ' + error.message 
+    });
+  }
+});
+
+// Endpoint para verificar si hay sesión guardada
+app.get('/api/sego-session/:userId', async (req, res) => {
+  const { userId } = req.params;
+  
+  try {
+    const { data, error } = await supabase
+      .from('sego_sessions')
+      .select('email, created_at')
+      .eq('user_id', userId)
+      .single();
+    
+    if (error || !data) {
+      return res.json({ connected: false });
+    }
+    
+    res.json({ 
+      connected: true,
+      email: data.email,
+      connectedAt: data.created_at
+    });
+  } catch (error) {
+    res.json({ connected: false });
+  }
+});
+
 // Endpoint para iniciar el scraping
 app.post('/api/scrape', async (req, res) => {
   if (scrapingEnProgreso) {
@@ -55,12 +176,13 @@ app.post('/api/scrape', async (req, res) => {
     });
   }
 
-  // Obtener credenciales del request body
-  const { username, password } = req.body;
+  // Obtener credenciales o userId del request body
+  const { username, password, userId } = req.body;
   
-  if (!username || !password) {
+  // Si no hay userId, requerir credenciales
+  if (!userId && (!username || !password)) {
     return res.status(400).json({ 
-      error: 'Se requieren credenciales de Sego (username y password)' 
+      error: 'Se requiere userId o credenciales de Sego (username y password)' 
     });
   }
 
@@ -79,8 +201,8 @@ app.post('/api/scrape', async (req, res) => {
     status: 'en_progreso'
   });
 
-  // Ejecutar scraping en background con las credenciales proporcionadas
-  ejecutarScraping(username, password).catch(error => {
+  // Ejecutar scraping en background
+  ejecutarScraping(username, password, userId).catch(error => {
     console.error('Error en scraping:', error);
     scrapingEnProgreso = false;
   });
@@ -94,9 +216,8 @@ app.get('/api/scrape/progreso', (req, res) => {
   });
 });
 
-async function ejecutarScraping(username, password) {
+async function ejecutarScraping(username, password, userId) {
   console.log('🚀 Iniciando scraping de Sego...');
-  console.log('👤 Usuario:', username);
   
   const browser = await puppeteer.launch({
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
@@ -136,34 +257,92 @@ async function ejecutarScraping(username, password) {
       }
     });
     
-    // LOGIN 100% ESTABLE
-    console.log('🔐 Iniciando sesión en Sego...');
-    await page.goto('https://www.sego.com.pe/web/login', {
-      waitUntil: 'networkidle2'
-    });
+    // Intentar usar sesión guardada primero
+    let usandoSesionGuardada = false;
     
-    // Esperar inputs
-    await page.waitForSelector('input[name="login"]', { visible: true });
-    await page.waitForSelector('input[name="password"]', { visible: true });
+    if (userId) {
+      console.log('🔍 Buscando sesión guardada...');
+      const { data, error } = await supabase
+        .from('sego_sessions')
+        .select('cookies, email')
+        .eq('user_id', userId)
+        .single();
+      
+      if (!error && data && data.cookies) {
+        console.log('✅ Sesión encontrada, usando cookies guardadas');
+        await page.setCookie(...data.cookies);
+        usandoSesionGuardada = true;
+        
+        // Ir directo a la tienda
+        await page.goto('https://www.sego.com.pe/shop', {
+          waitUntil: 'networkidle2'
+        });
+        
+        // Verificar que sigue logueado
+        const sigueLogueado = await page.evaluate(() => {
+          return !!document.querySelector('.o_user_menu, .dropdown-toggle');
+        });
+        
+        if (!sigueLogueado) {
+          console.log('⚠️ Sesión expirada, haciendo login nuevamente...');
+          usandoSesionGuardada = false;
+        } else {
+          console.log('✅ Sesión válida, continuando scraping...');
+          progreso.categoriaActual = 'Sesión restaurada';
+        }
+      }
+    }
     
-    // Escribir lento (anti-bot)
-    await page.type('input[name="login"]', username, { delay: 50 });
-    await page.type('input[name="password"]', password, { delay: 50 });
-    
-    // Esperar botón
-    await page.waitForSelector('button[type="submit"]', { visible: true });
-    
-    // Click + navegación juntos (CLAVE)
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'networkidle2' }),
-      page.evaluate(() => {
-        const btn = document.querySelector('button[type="submit"]');
-        if (btn) btn.click();
-      })
-    ]);
-    
-    console.log('✅ Login completado');
-    progreso.categoriaActual = 'Login exitoso';
+    // Si no hay sesión guardada o expiró, hacer login
+    if (!usandoSesionGuardada) {
+      if (!username || !password) {
+        throw new Error('Se requieren credenciales para hacer login');
+      }
+      
+      console.log('🔐 Iniciando sesión en Sego...');
+      console.log('👤 Usuario:', username);
+      await page.goto('https://www.sego.com.pe/web/login', {
+        waitUntil: 'networkidle2'
+      });
+      
+      // Esperar inputs
+      await page.waitForSelector('input[name="login"]', { visible: true });
+      await page.waitForSelector('input[name="password"]', { visible: true });
+      
+      // Escribir lento (anti-bot)
+      await page.type('input[name="login"]', username, { delay: 50 });
+      await page.type('input[name="password"]', password, { delay: 50 });
+      
+      // Esperar botón
+      await page.waitForSelector('button[type="submit"]', { visible: true });
+      
+      // Click + navegación juntos (CLAVE)
+      await Promise.all([
+        page.waitForNavigation({ waitUntil: 'networkidle2' }),
+        page.evaluate(() => {
+          const btn = document.querySelector('button[type="submit"]');
+          if (btn) btn.click();
+        })
+      ]);
+      
+      console.log('✅ Login completado');
+      progreso.categoriaActual = 'Login exitoso';
+      
+      // Guardar cookies para próxima vez (si tenemos userId)
+      if (userId) {
+        const cookies = await page.cookies();
+        await supabase
+          .from('sego_sessions')
+          .upsert({
+            user_id: userId,
+            email: username,
+            cookies: cookies
+          }, {
+            onConflict: 'user_id'
+          });
+        console.log('💾 Cookies guardadas para próxima vez');
+      }
+    }
 
     let todosLosProductos = [];
 

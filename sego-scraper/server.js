@@ -596,22 +596,73 @@ async function ejecutarScraping(username, password, userId) {
     console.log(`\n📊 Total productos encontrados: ${todosLosProductos.length}`);
     console.log('💾 Insertando en Supabase (modo masivo)...');
 
-    // Inserción masiva (10x más rápido)
-    const { data, error } = await supabase
-      .from('productos')
-      .upsert(todosLosProductos, { 
-        onConflict: 'nombre',
-        ignoreDuplicates: false 
-      });
+    // 🔥 GENERAR SKU VÁLIDO PARA CADA PRODUCTO
+    const productosConSku = todosLosProductos.map((prod) => {
+      // Si tiene SKU válido, usarlo. Si no, generar uno basado en nombre
+      const skuValido = prod.sku && prod.sku.trim() !== '' 
+        ? prod.sku.trim()
+        : prod.nombre.substring(0, 50).replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      
+      return {
+        ...prod,
+        sku: skuValido
+      };
+    });
 
-    if (error) {
-      console.error('Error en inserción masiva:', error);
-      progreso.productosInsertados = 0;
-    } else {
-      progreso.productosInsertados = todosLosProductos.length;
+    // Filtrar productos con SKU válido (no vacío)
+    const productosValidos = productosConSku.filter(p => p.sku && p.sku.trim() !== '');
+    
+    console.log(`📊 Productos con SKU válido: ${productosValidos.length}/${todosLosProductos.length}`);
+    if (productosValidos.length < todosLosProductos.length) {
+      console.log(`⚠️ ${todosLosProductos.length - productosValidos.length} productos sin SKU válido serán ignorados`);
+    }
+
+    // Insertar en lotes para evitar timeout
+    const tamanoLote = 100;
+    let productosInsertados = 0;
+    let erroresInsercion = 0;
+
+    for (let i = 0; i < productosValidos.length; i += tamanoLote) {
+      const lote = productosValidos.slice(i, i + tamanoLote);
+      const numeroLote = Math.floor(i / tamanoLote) + 1;
+      const totalLotes = Math.ceil(productosValidos.length / tamanoLote);
+      
+      console.log(`📦 Insertando lote ${numeroLote}/${totalLotes} (${lote.length} productos)...`);
+
+      try {
+        const { error } = await supabase
+          .from('productos')
+          .upsert(lote, { 
+            onConflict: 'sku',
+            ignoreDuplicates: true
+          });
+
+        if (error) {
+          console.error(`⚠️ Error en lote ${numeroLote}:`, error.message);
+          erroresInsercion++;
+        } else {
+          productosInsertados += lote.length;
+          console.log(`✅ Lote ${numeroLote} insertado correctamente (${lote.length} productos)`);
+        }
+      } catch (e) {
+        console.error(`❌ Error al insertar lote ${numeroLote}:`, e.message);
+        erroresInsercion++;
+      }
+    }
+
+    progreso.productosInsertados = productosInsertados;
+    
+    if (erroresInsercion === 0) {
       console.log('✅ SCRAPING COMPLETADO');
       console.log(`   📦 Total encontrados: ${todosLosProductos.length}`);
-      console.log(`   ✓ Insertados/Actualizados: ${todosLosProductos.length}`);
+      console.log(`   ✓ Con SKU válido: ${productosValidos.length}`);
+      console.log(`   ✓ Insertados/Actualizados: ${productosInsertados}`);
+    } else {
+      console.log('⚠️ SCRAPING COMPLETADO CON ERRORES');
+      console.log(`   📦 Total encontrados: ${todosLosProductos.length}`);
+      console.log(`   ✓ Con SKU válido: ${productosValidos.length}`);
+      console.log(`   ✓ Insertados: ${productosInsertados}`);
+      console.log(`   ❌ Errores: ${erroresInsercion}`);
     }
 
   } catch (error) {

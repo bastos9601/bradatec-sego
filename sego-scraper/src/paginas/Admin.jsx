@@ -32,6 +32,8 @@ export default function Admin() {
     username: '',
     password: ''
   })
+  const [sesionSego, setSesionSego] = useState(null)
+  const [userId, setUserId] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -47,7 +49,9 @@ export default function Admin() {
       navigate('/admin/login')
       return
     }
-
+    
+    setUserId(user.id)
+    verificarSesionSego(user.id)
     const { data } = await supabase
       .from('perfiles')
       .select('rol')
@@ -57,6 +61,61 @@ export default function Admin() {
     if (!data || data.rol !== 'admin') {
       navigate('/')
     }
+  }
+
+  const verificarSesionSego = async (uid) => {
+    try {
+      const response = await fetch(`https://capable-nature-production-7d18.up.railway.app/api/sego-session/${uid}`)
+      const data = await response.json()
+      setSesionSego(data.connected ? data : null)
+    } catch (error) {
+      console.error('Error verificando sesión:', error)
+      setSesionSego(null)
+    }
+  }
+
+  const conectarCuentaSego = async () => {
+    if (!credencialesSego.username || !credencialesSego.password) {
+      setMensaje('Por favor ingresa email y contraseña')
+      setTipo('error')
+      return
+    }
+
+    setLoading(true)
+    setMensaje('Conectando cuenta de Sego...')
+
+    try {
+      const response = await fetch('https://capable-nature-production-7d18.up.railway.app/api/conectar-sego', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: credencialesSego.username,
+          password: credencialesSego.password,
+          userId: userId
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setMensaje('✓ Cuenta de Sego conectada exitosamente')
+        setTipo('success')
+        setMostrarModalCredenciales(false)
+        setCredencialesSego({ username: '', password: '' })
+        verificarSesionSego(userId)
+      } else {
+        setMensaje(`✗ Error: ${result.error}`)
+        setTipo('error')
+      }
+    } catch (error) {
+      console.error('Error conectando cuenta:', error)
+      setMensaje(`✗ Error de conexión: ${error.message}`)
+      setTipo('error')
+    }
+
+    setLoading(false)
   }
 
   const obtenerProductos = async () => {
@@ -486,8 +545,8 @@ export default function Admin() {
   }
 
   const importarProductosSego = async () => {
-    // Validar que se hayan ingresado las credenciales
-    if (!credencialesSego.username || !credencialesSego.password) {
+    // Si hay sesión guardada, usar esa. Si no, pedir credenciales
+    if (!sesionSego && (!credencialesSego.username || !credencialesSego.password)) {
       setMostrarModalCredenciales(true);
       return;
     }
@@ -497,15 +556,20 @@ export default function Admin() {
     setMostrarModalCredenciales(false);
 
     try {
+      const body = sesionSego 
+        ? { userId: userId } // Usar sesión guardada
+        : { // Usar credenciales
+            username: credencialesSego.username,
+            password: credencialesSego.password,
+            userId: userId
+          };
+
       const response = await fetch('https://capable-nature-production-7d18.up.railway.app/api/scrape', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          username: credencialesSego.username,
-          password: credencialesSego.password
-        })
+        body: JSON.stringify(body)
       });
 
       const result = await response.json();
@@ -609,20 +673,36 @@ export default function Admin() {
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h3 className="text-xl font-semibold mb-4">Gestionar Productos</h3>
               
-              <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
-                <p className="text-sm text-green-800 mb-2">
-                  <strong>✅ Servidor Railway:</strong> Configurado con Chromium
-                </p>
-                <p className="text-sm text-green-700 mb-2">
-                  Haz clic en "Importar Productos Sego" para scrapear automáticamente todos los productos desde la nube.
-                </p>
-                <p className="text-xs text-green-600">
-                  ⏱️ El proceso tomará 10-15 minutos. Verás el progreso en tiempo real.<br/>
-                  🔐 Login automático con credenciales configuradas en el servidor.
-                </p>
-              </div>
+              {sesionSego ? (
+                <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
+                  <p className="text-sm text-green-800 mb-2">
+                    <strong>✅ Cuenta de Sego conectada:</strong> {sesionSego.email}
+                  </p>
+                  <p className="text-xs text-green-600">
+                    No necesitas ingresar credenciales nuevamente. El scraping usará tu sesión guardada.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-4">
+                  <p className="text-sm text-yellow-800 mb-2">
+                    <strong>⚠️ Cuenta de Sego no conectada</strong>
+                  </p>
+                  <p className="text-xs text-yellow-700">
+                    Conecta tu cuenta de Sego una vez para no tener que ingresar credenciales cada vez que importes productos.
+                  </p>
+                </div>
+              )}
               
               <div className="flex gap-4 flex-wrap">
+                {!sesionSego && (
+                  <button
+                    onClick={() => setMostrarModalCredenciales(true)}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition"
+                  >
+                    🔗 Conectar Cuenta de Sego
+                  </button>
+                )}
+                
                 <button
                   onClick={importarProductosSego}
                   disabled={loading}
@@ -1384,9 +1464,9 @@ export default function Admin() {
         {mostrarModalCredenciales && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg max-w-md w-full p-6">
-              <h3 className="text-xl font-bold mb-4 text-gray-800">Credenciales de Sego</h3>
+              <h3 className="text-xl font-bold mb-4 text-gray-800">Conectar Cuenta de Sego</h3>
               <p className="text-sm text-gray-600 mb-4">
-                Ingresa tus credenciales de Sego para iniciar el scraping automático.
+                Conecta tu cuenta de Sego una vez y no tendrás que ingresar credenciales nuevamente.
               </p>
               
               <div className="space-y-4">
@@ -1412,20 +1492,20 @@ export default function Admin() {
                   />
                 </div>
                 
-                <div className="bg-yellow-50 border-l-4 border-yellow-500 p-3">
-                  <p className="text-xs text-yellow-800">
-                    🔒 Tus credenciales se envían de forma segura al servidor y NO se guardan.
+                <div className="bg-blue-50 border-l-4 border-blue-500 p-3">
+                  <p className="text-xs text-blue-800">
+                    🔒 Solo se guardan las cookies de sesión (no las credenciales). Podrás desconectar tu cuenta cuando quieras.
                   </p>
                 </div>
               </div>
               
               <div className="flex gap-3 mt-6">
                 <button
-                  onClick={importarProductosSego}
-                  disabled={!credencialesSego.username || !credencialesSego.password}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={conectarCuentaSego}
+                  disabled={!credencialesSego.username || !credencialesSego.password || loading}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Iniciar Scraping
+                  {loading ? 'Conectando...' : '🔗 Conectar Cuenta'}
                 </button>
                 <button
                   onClick={() => setMostrarModalCredenciales(false)}

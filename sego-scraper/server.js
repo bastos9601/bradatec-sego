@@ -4,11 +4,23 @@ import puppeteer from 'puppeteer';
 import { createClient } from '@supabase/supabase-js';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Ruta raíz para verificar que el servidor está funcionando
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    message: 'Servidor de scraping Bradatec-Sego funcionando correctamente',
+    endpoints: {
+      scrape: 'POST /api/scrape',
+      progreso: 'GET /api/scrape/progreso'
+    }
+  });
+});
 
 // Configuración de Supabase
 const SUPABASE_URL = 'https://sajuzexibgpikrijqdjt.supabase.co';
@@ -73,36 +85,46 @@ async function ejecutarScraping() {
   console.log('🚀 Iniciando scraping de Sego...');
   
   const browser = await puppeteer.launch({
-    headless: false, // Navegador visible para login manual
+    headless: true, // Modo headless para servidores sin GUI
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu'
+    ],
     defaultViewport: { width: 1280, height: 800 }
   });
 
   try {
     const page = await browser.newPage();
     
-    // Login MANUAL en Sego
-    console.log('🔐 Abriendo página de login de Sego...');
+    // Login AUTOMÁTICO en Sego
+    console.log('🔐 Iniciando sesión en Sego...');
     await page.goto('https://www.sego.com.pe/web/login', { waitUntil: 'networkidle2' });
     
-    console.log('\n⏸️  PAUSA: Inicia sesión manualmente en el navegador');
-    console.log('   1. Escribe tu email y contraseña');
-    console.log('   2. Haz clic en "Iniciar sesión"');
-    console.log('   3. Espera a que cargue la página principal');
-    console.log('   4. El script continuará automáticamente...\n');
+    // Esperar a que cargue el formulario
+    await page.waitForSelector('input[name="login"]', { timeout: 10000 });
     
-    progreso.categoriaActual = 'Esperando login manual...';
+    // Llenar formulario de login
+    await page.type('input[name="login"]', SEGO_USERNAME);
+    await page.type('input[name="password"]', SEGO_PASSWORD);
     
-    // Esperar a que el usuario inicie sesión manualmente
+    // Hacer clic en el botón de login
+    await page.click('button[type="submit"]');
+    
+    progreso.categoriaActual = 'Iniciando sesión...';
+    
+    // Esperar a que se complete el login
     await page.waitForFunction(
       () => {
         const loginForm = document.querySelector('input[name="login"]');
         const userMenu = document.querySelector('.o_user_menu, .dropdown-toggle');
         return !loginForm && userMenu;
       },
-      { timeout: 300000 } // Esperar hasta 5 minutos
+      { timeout: 30000 }
     );
     
-    console.log('✅ Sesión iniciada manualmente detectada');
+    console.log('✅ Sesión iniciada correctamente');
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     let todosLosProductos = [];
@@ -299,6 +321,7 @@ async function ejecutarScraping() {
 }
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor backend corriendo en http://localhost:${PORT}`);
-  console.log(`📡 Endpoint de scraping: http://localhost:${PORT}/api/scrape`);
+  console.log(`🚀 Servidor backend corriendo en puerto ${PORT}`);
+  console.log(`📡 Endpoint de scraping: POST /api/scrape`);
+  console.log(`📊 Endpoint de progreso: GET /api/scrape/progreso`);
 });

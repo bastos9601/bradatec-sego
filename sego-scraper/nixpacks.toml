@@ -1,0 +1,13 @@
+# Configuración para Railway con soporte Puppeteer
+[phases.setup]
+nixPkgs = ['nodejs', 'chromium']
+
+[phases.install]
+cmds = ['npm install']
+
+[start]
+cmd = 'node server.js'
+
+[env]
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true'
+PUPPETEER_EXECUTABLE_PATH = '/nix/store/*-chromium-*/bin/chromium'

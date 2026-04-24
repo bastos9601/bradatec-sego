@@ -73,24 +73,21 @@ app.post('/api/conectar-sego', async (req, res) => {
       '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
     
+    // Cargar página con timeout más largo
     await page.goto('https://www.sego.com.pe/web/login', {
-      waitUntil: 'networkidle2'
+      waitUntil: 'domcontentloaded',
+      timeout: 60000
     });
     
-    await page.waitForSelector('input[name="login"]', { visible: true });
-    await page.waitForSelector('input[name="password"]', { visible: true });
+    await page.waitForSelector('input[name="login"]', { timeout: 15000 });
     
     await page.type('input[name="login"]', email, { delay: 50 });
     await page.type('input[name="password"]', password, { delay: 50 });
     
-    await page.waitForSelector('button[type="submit"]', { visible: true });
-    
+    // Enviar formulario con Enter (más robusto)
     await Promise.all([
-      page.waitForNavigation({ waitUntil: 'networkidle2' }),
-      page.evaluate(() => {
-        const btn = document.querySelector('button[type="submit"]');
-        if (btn) btn.click();
-      })
+      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }),
+      page.keyboard.press('Enter')
     ]);
     
     // Verificar que el login fue exitoso
@@ -301,31 +298,39 @@ async function ejecutarScraping(username, password, userId) {
       
       console.log('🔐 Iniciando sesión en Sego...');
       console.log('👤 Usuario:', username);
+      
+      // Cargar página con timeout más largo
       await page.goto('https://www.sego.com.pe/web/login', {
-        waitUntil: 'networkidle2'
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
       });
       
       // Esperar inputs
-      await page.waitForSelector('input[name="login"]', { visible: true });
-      await page.waitForSelector('input[name="password"]', { visible: true });
+      await page.waitForSelector('input[name="login"]', { timeout: 15000 });
       
       // Escribir lento (anti-bot)
       await page.type('input[name="login"]', username, { delay: 50 });
       await page.type('input[name="password"]', password, { delay: 50 });
       
-      // Esperar botón
-      await page.waitForSelector('button[type="submit"]', { visible: true });
+      // Screenshot para debug (opcional)
+      // await page.screenshot({ path: 'login-debug.png', fullPage: true });
       
-      // Click + navegación juntos (CLAVE)
+      // Enviar formulario con Enter (más robusto que click)
       await Promise.all([
-        page.waitForNavigation({ waitUntil: 'networkidle2' }),
-        page.evaluate(() => {
-          const btn = document.querySelector('button[type="submit"]');
-          if (btn) btn.click();
-        })
+        page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }),
+        page.keyboard.press('Enter')
       ]);
       
-      console.log('✅ Login completado');
+      // Validar que el login fue exitoso
+      const logged = await page.evaluate(() => {
+        return !!document.querySelector('.o_user_menu, .dropdown-toggle');
+      });
+      
+      if (!logged) {
+        throw new Error('Login fallido - credenciales incorrectas o página no cargó correctamente');
+      }
+      
+      console.log('✅ Login completado exitosamente');
       progreso.categoriaActual = 'Login exitoso';
       
       // Guardar cookies para próxima vez (si tenemos userId)

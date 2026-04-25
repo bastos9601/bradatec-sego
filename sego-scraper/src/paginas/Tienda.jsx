@@ -366,10 +366,9 @@ export default function Tienda() {
           
           {/* Header principal */}
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
-              <img src="/src/assets/bradatec.png" alt="Bradatec" className="h-10 md:h-12 w-auto" />
-              <h1 className="hidden md:block text-lg md:text-2xl font-bold">bradatecsr</h1>
-            </div>
+            <h1 className="text-lg md:text-2xl font-bold cursor-pointer" onClick={() => navigate('/')}>
+              bradatec
+            </h1>
             
             {/* Botones de usuario en desktop */}
             <div className="hidden md:flex items-center gap-3">

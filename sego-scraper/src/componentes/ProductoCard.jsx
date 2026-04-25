@@ -12,7 +12,7 @@ export default function ProductoCard({ producto, moneda, tipoCambio, onAgregarCa
   const precioNumerico = extraerPrecio(producto.precio);
   
   // Convertir precio según la moneda seleccionada
-  const precioConvertido = moneda === 'PEN' 
+  const precioConvertido = moneda === 'PEN' && tipoCambio
     ? precioNumerico * tipoCambio 
     : precioNumerico;
 

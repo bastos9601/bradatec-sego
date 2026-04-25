@@ -25,12 +25,21 @@ export default function Login() {
       setError(error.message)
       setLoading(false)
     } else {
-      // Verificar el rol del usuario
+      // Verificar el rol y estado del usuario
       const { data: perfil } = await supabase
         .from('perfiles')
-        .select('rol')
+        .select('rol, activo')
         .eq('id', data.user.id)
         .single()
+      
+      // Verificar si el usuario está activo
+      if (perfil && !perfil.activo) {
+        setError('❌ Tu cuenta ha sido desactivada. Contacta al administrador.')
+        // Cerrar sesión inmediatamente
+        await supabase.auth.signOut()
+        setLoading(false)
+        return
+      }
       
       // Redirigir según el rol
       if (perfil?.rol === 'admin') {

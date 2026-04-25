@@ -16,6 +16,8 @@ export default function ModalCheckout({
     nombre: '',
     email: '',
     celular: '',
+    tipoDocumento: 'DNI', // DNI o RUC
+    numeroDocumento: '',
     direccion: ''
   })
   const [error, setError] = useState('')
@@ -43,6 +45,8 @@ export default function ModalCheckout({
         nombre: datosEnvio.nombre,
         email: datosEnvio.email,
         celular: datosEnvio.celular,
+        tipo_documento: datosEnvio.tipoDocumento,
+        numero_documento: datosEnvio.numeroDocumento,
         direccion: datosEnvio.direccion,
         productos: carrito.map(item => ({
           id: item.id,
@@ -93,6 +97,7 @@ export default function ModalCheckout({
         mensajeAdmin += `Nombre: ${datosEnvio.nombre}\n`
         mensajeAdmin += `Email: ${datosEnvio.email}\n`
         mensajeAdmin += `Celular: ${datosEnvio.celular}\n`
+        mensajeAdmin += `${datosEnvio.tipoDocumento}: ${datosEnvio.numeroDocumento}\n`
         mensajeAdmin += `Dirección: ${datosEnvio.direccion}\n\n`
         
         mensajeAdmin += `📋 *Productos:*\n`
@@ -225,6 +230,38 @@ export default function ModalCheckout({
                 placeholder="999 999 999"
                 required
               />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-1">
+                <label className="block text-gray-700 font-semibold mb-2">
+                  Tipo de Documento *
+                </label>
+                <select
+                  value={datosEnvio.tipoDocumento}
+                  onChange={(e) => setDatosEnvio({...datosEnvio, tipoDocumento: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="DNI">DNI</option>
+                  <option value="RUC">RUC</option>
+                </select>
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-gray-700 font-semibold mb-2">
+                  {datosEnvio.tipoDocumento === 'DNI' ? 'Número de DNI' : 'Número de RUC'} *
+                </label>
+                <input
+                  type="text"
+                  value={datosEnvio.numeroDocumento}
+                  onChange={(e) => setDatosEnvio({...datosEnvio, numeroDocumento: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder={datosEnvio.tipoDocumento === 'DNI' ? '12345678' : '20123456789'}
+                  maxLength={datosEnvio.tipoDocumento === 'DNI' ? '8' : '11'}
+                  required
+                />
+              </div>
             </div>
 
             <div>

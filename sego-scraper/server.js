@@ -594,27 +594,53 @@ async function ejecutarScraping(username, password, userId) {
     }
 
     console.log(`\n📊 Total productos encontrados: ${todosLosProductos.length}`);
-    console.log('💾 Insertando en Supabase (modo masivo)...');
+    console.log('💾 Procesando productos para inserción...');
 
-    // 🔥 GENERAR SKU VÁLIDO PARA CADA PRODUCTO
-    const productosConSku = todosLosProductos.map((prod) => {
-      // Si tiene SKU válido, usarlo. Si no, generar uno basado en nombre
-      const skuValido = prod.sku && prod.sku.trim() !== '' 
-        ? prod.sku.trim()
-        : prod.nombre.substring(0, 50).replace(/[^a-z0-9]/gi, '-').toLowerCase();
-      
-      return {
-        ...prod,
-        sku: skuValido
-      };
-    });
-
-    // Filtrar productos con SKU válido (no vacío)
-    const productosValidos = productosConSku.filter(p => p.sku && p.sku.trim() !== '');
+    // 🔥 ESTRATEGIA: Usar NOMBRE como identificador único (no SKU)
+    // Razón: Sego tiene múltiples SKUs por producto (variantes)
+    // Ejemplo: "Tipo de Cambio" tiene SKU: HK-DS-KI6608-P y HK-IDS7208HQH-M1/XT
     
-    console.log(`📊 Productos con SKU válido: ${productosValidos.length}/${todosLosProductos.length}`);
-    if (productosValidos.length < todosLosProductos.length) {
-      console.log(`⚠️ ${todosLosProductos.length - productosValidos.length} productos sin SKU válido serán ignorados`);
+    const nombreMap = new Map();
+    const productosUnicos = [];
+    const productosDuplicados = [];
+
+    for (const prod of todosLosProductos) {
+      const nombreNormalizado = prod.nombre.toLowerCase().trim();
+      
+      if (nombreMap.has(nombreNormalizado)) {
+        // Es un duplicado (mismo nombre)
+        productosDuplicados.push({
+          nombre: prod.nombre,
+          sku: prod.sku || 'SIN SKU',
+          precio: prod.precio,
+          categoria: prod.categoria
+        });
+      } else {
+        // Es único
+        nombreMap.set(nombreNormalizado, true);
+        productosUnicos.push({
+          ...prod,
+          // Generar ID único basado en nombre normalizado
+          id: nombreNormalizado.replace(/[^a-z0-9]/gi, '-').substring(0, 100)
+        });
+      }
+    }
+    
+    console.log(`📊 Análisis de productos:`);
+    console.log(`   ✓ Total encontrados: ${todosLosProductos.length}`);
+    console.log(`   ✓ Productos únicos (por nombre): ${productosUnicos.length}`);
+    console.log(`   ⚠️ Productos duplicados (ignorados): ${productosDuplicados.length}`);
+    
+    if (productosDuplicados.length > 0 && productosDuplicados.length <= 10) {
+      console.log(`\n   Duplicados encontrados:`);
+      productosDuplicados.forEach((dup, i) => {
+        console.log(`   ${i + 1}. ${dup.nombre} | SKU: ${dup.sku} | ${dup.precio} | ${dup.categoria}`);
+      });
+    } else if (productosDuplicados.length > 10) {
+      console.log(`   (Mostrando primeros 10 de ${productosDuplicados.length})`);
+      productosDuplicados.slice(0, 10).forEach((dup, i) => {
+        console.log(`   ${i + 1}. ${dup.nombre} | SKU: ${dup.sku} | ${dup.precio} | ${dup.categoria}`);
+      });
     }
 
     // Insertar en lotes para evitar timeout
@@ -622,10 +648,12 @@ async function ejecutarScraping(username, password, userId) {
     let productosInsertados = 0;
     let erroresInsercion = 0;
 
-    for (let i = 0; i < productosValidos.length; i += tamanoLote) {
-      const lote = productosValidos.slice(i, i + tamanoLote);
+    console.log(`\n💾 Insertando en Supabase (modo masivo)...`);
+
+    for (let i = 0; i < productosUnicos.length; i += tamanoLote) {
+      const lote = productosUnicos.slice(i, i + tamanoLote);
       const numeroLote = Math.floor(i / tamanoLote) + 1;
-      const totalLotes = Math.ceil(productosValidos.length / tamanoLote);
+      const totalLotes = Math.ceil(productosUnicos.length / tamanoLote);
       
       console.log(`📦 Insertando lote ${numeroLote}/${totalLotes} (${lote.length} productos)...`);
 
@@ -633,8 +661,8 @@ async function ejecutarScraping(username, password, userId) {
         const { error } = await supabase
           .from('productos')
           .upsert(lote, { 
-            onConflict: 'sku',
-            ignoreDuplicates: true
+            onConflict: 'id',
+            ignoreDuplicates: false
           });
 
         if (error) {
@@ -652,17 +680,14 @@ async function ejecutarScraping(username, password, userId) {
 
     progreso.productosInsertados = productosInsertados;
     
-    if (erroresInsercion === 0) {
-      console.log('✅ SCRAPING COMPLETADO');
-      console.log(`   📦 Total encontrados: ${todosLosProductos.length}`);
-      console.log(`   ✓ Con SKU válido: ${productosValidos.length}`);
-      console.log(`   ✓ Insertados/Actualizados: ${productosInsertados}`);
-    } else {
-      console.log('⚠️ SCRAPING COMPLETADO CON ERRORES');
-      console.log(`   📦 Total encontrados: ${todosLosProductos.length}`);
-      console.log(`   ✓ Con SKU válido: ${productosValidos.length}`);
-      console.log(`   ✓ Insertados: ${productosInsertados}`);
-      console.log(`   ❌ Errores: ${erroresInsercion}`);
+    console.log(`\n✅ SCRAPING COMPLETADO`);
+    console.log(`   📦 Total encontrados en Sego: ${todosLosProductos.length}`);
+    console.log(`   ✓ Productos únicos (sin duplicados): ${productosUnicos.length}`);
+    console.log(`   ⚠️ Duplicados descartados: ${productosDuplicados.length}`);
+    console.log(`   ✓ Insertados/Actualizados en BD: ${productosInsertados}`);
+    
+    if (erroresInsercion > 0) {
+      console.log(`   ❌ Errores en inserción: ${erroresInsercion}`);
     }
 
   } catch (error) {

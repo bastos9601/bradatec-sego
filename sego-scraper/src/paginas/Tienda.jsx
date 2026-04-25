@@ -5,6 +5,7 @@ import ProductoCard from '../componentes/ProductoCard'
 import ModalCarrito from '../componentes/ModalCarrito'
 import CarritoSidebar from '../componentes/CarritoSidebar'
 import ModalCheckout from '../componentes/ModalCheckout'
+import { obtenerTipoCambioAPI } from '../config/api'
 
 export default function Tienda() {
   const [productos, setProductos] = useState([])
@@ -13,7 +14,7 @@ export default function Tienda() {
   const [categorias, setCategorias] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [moneda, setMoneda] = useState('USD') // USD o PEN
-  const [tipoCambio, setTipoCambio] = useState(3.47) // Tipo de cambio por defecto
+  const [tipoCambio, setTipoCambio] = useState(null) // null hasta obtener de API
   const [cargandoTipoCambio, setCargandoTipoCambio] = useState(false)
   const [modalCarrito, setModalCarrito] = useState(null) // Producto agregado al carrito
   const [carrito, setCarrito] = useState(() => {
@@ -90,76 +91,14 @@ export default function Tienda() {
   const obtenerTipoCambio = async () => {
     setCargandoTipoCambio(true)
     try {
-      // Intentar múltiples APIs en orden de prioridad
-      
-      // Opción 1: API de cuantoestaeldolar.pe (la que aparece en Google)
-      try {
-        const response1 = await fetch('https://cuantoestaeldolar.pe/api/exchange/latest')
-        const data1 = await response1.json()
-        
-        if (data1 && data1.venta) {
-          const tipoCambioDolar = parseFloat(data1.venta)
-          setTipoCambio(tipoCambioDolar)
-          console.log('✅ Tipo de cambio cuantoestaeldolar.pe:', tipoCambioDolar.toFixed(3))
-          setCargandoTipoCambio(false)
-          return
-        }
-      } catch (error) {
-        console.log('⚠️ API cuantoestaeldolar.pe no disponible, intentando alternativa...')
-      }
-      
-      // Opción 2: API de SUNAT (oficial Perú)
-      try {
-        const response2 = await fetch('https://api.apis.net.pe/v1/tipo-cambio-sunat')
-        const data2 = await response2.json()
-        
-        if (data2.compra && data2.venta) {
-          // Usar el precio de venta (más común para conversiones)
-          const tipoCambioSunat = parseFloat(data2.venta)
-          setTipoCambio(tipoCambioSunat)
-          console.log('✅ Tipo de cambio SUNAT:', tipoCambioSunat.toFixed(3))
-          setCargandoTipoCambio(false)
-          return
-        }
-      } catch (error) {
-        console.log('⚠️ API SUNAT no disponible, intentando alternativa...')
-      }
-      
-      // Opción 3: ExchangeRate-API (respaldo internacional)
-      try {
-        const response3 = await fetch('https://api.exchangerate-api.com/v4/latest/USD')
-        const data3 = await response3.json()
-        
-        if (data3.rates && data3.rates.PEN) {
-          setTipoCambio(data3.rates.PEN)
-          console.log('✅ Tipo de cambio ExchangeRate-API:', data3.rates.PEN.toFixed(3))
-          setCargandoTipoCambio(false)
-          return
-        }
-      } catch (error) {
-        console.log('⚠️ ExchangeRate-API no disponible, intentando alternativa...')
-      }
-      
-      // Opción 4: Open Exchange Rates (último respaldo)
-      try {
-        const response4 = await fetch('https://open.er-api.com/v6/latest/USD')
-        const data4 = await response4.json()
-        
-        if (data4.rates && data4.rates.PEN) {
-          setTipoCambio(data4.rates.PEN)
-          console.log('✅ Tipo de cambio Open Exchange Rates:', data4.rates.PEN.toFixed(3))
-          setCargandoTipoCambio(false)
-          return
-        }
-      } catch (error) {
-        console.log('⚠️ Open Exchange Rates no disponible')
-      }
-      
-      // Si todas las APIs fallan, mantener el tipo de cambio por defecto
-      console.log('⚠️ Usando tipo de cambio por defecto: 3.47')
-      
+      // Usar SOLO Currency API
+      const tipoCambio = await obtenerTipoCambioAPI()
+      setTipoCambio(tipoCambio)
+      console.log('✅ Tipo de cambio actualizado:', tipoCambio.toFixed(2))
     } catch (error) {
-      console.error('❌ Error al obtener tipo de cambio:', error)
+      console.error('❌ Error al obtener tipo de cambio:', error.message)
+      // No establecer valor por defecto, mostrar error
+      alert('⚠️ No se pudo obtener el tipo de cambio. Por favor, intenta más tarde.')
     }
     setCargandoTipoCambio(false)
   }
@@ -247,6 +186,10 @@ export default function Tienda() {
 
   // Calcular total del carrito
   const calcularTotal = () => {
+    if (!tipoCambio && moneda === 'PEN') {
+      return 0; // No calcular si no hay tipo de cambio y está en PEN
+    }
+    
     return carrito.reduce((total, item) => {
       const extraerPrecio = (precioStr) => {
         if (!precioStr) return 0;
@@ -258,7 +201,7 @@ export default function Tienda() {
       };
       
       const precioNumerico = extraerPrecio(item.precio);
-      const precioConvertido = moneda === 'PEN' ? precioNumerico * tipoCambio : precioNumerico;
+      const precioConvertido = moneda === 'PEN' && tipoCambio ? precioNumerico * tipoCambio : precioNumerico;
       return total + (precioConvertido * item.cantidad);
     }, 0);
   }
@@ -328,7 +271,7 @@ export default function Tienda() {
                   <div className="text-sm bg-blue-700 rounded-lg px-3 py-2 flex items-center gap-2">
                     <div>
                       <span className="text-blue-200">T.C:</span>{' '}
-                      <span className="font-bold">S/ {tipoCambio.toFixed(3)}</span>
+                      <span className="font-bold">S/ {tipoCambio ? tipoCambio.toFixed(3) : '...'}</span>
                     </div>
                     <button
                       onClick={obtenerTipoCambio}
@@ -408,7 +351,7 @@ export default function Tienda() {
                   {/* Tipo de cambio móvil */}
                   <div className="text-xs bg-blue-700 rounded-lg px-3 py-2 flex items-center gap-2">
                     <span className="text-blue-200">T.C:</span>
-                    <span className="font-bold">S/ {tipoCambio.toFixed(3)}</span>
+                    <span className="font-bold">S/ {tipoCambio ? tipoCambio.toFixed(3) : '...'}</span>
                     <button
                       onClick={obtenerTipoCambio}
                       disabled={cargandoTipoCambio}

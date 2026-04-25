@@ -51,7 +51,7 @@ export default function Registro() {
       }
 
       if (data.user) {
-        // Crear perfil de usuario con rol 'usuario', nombre, celular y email
+        // Crear perfil de usuario con rol 'usuario', nombre, celular, email y activo=true
         const { error: perfilError } = await supabase
           .from('perfiles')
           .insert([
@@ -60,7 +60,8 @@ export default function Registro() {
               rol: 'usuario',
               nombre: nombre,
               celular: celular,
-              email: email
+              email: email,
+              activo: true
             }
           ])
 

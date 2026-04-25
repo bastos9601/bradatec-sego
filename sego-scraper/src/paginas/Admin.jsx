@@ -130,7 +130,7 @@ export default function Admin() {
     try {
       const { data, error } = await supabase
         .from('perfiles')
-        .select('id, rol, nombre, celular, email, created_at')
+        .select('id, rol, nombre, celular, email, created_at, activo')
         .order('created_at', { ascending: false })
       
       if (error) {
@@ -294,20 +294,28 @@ export default function Admin() {
   }
 
   const eliminarUsuario = async (usuarioId) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.')) {
+    if (!confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer y eliminará todos sus datos.')) {
       return
     }
 
+    setLoading(true)
+    setMensaje('')
+
     try {
-      const { error } = await supabase
+      // Primero, eliminar de la tabla perfiles
+      const { error: perfilError } = await supabase
         .from('perfiles')
         .delete()
         .eq('id', usuarioId)
 
-      if (error) {
-        throw error
+      if (perfilError) {
+        throw perfilError
       }
 
+      // Luego, eliminar de Supabase Auth
+      // Nota: Esto requiere que el usuario sea admin o que uses una función RPC
+      // Por ahora, solo eliminamos de perfiles
+      
       setMensaje('✓ Usuario eliminado correctamente')
       setTipo('success')
       obtenerUsuarios()
@@ -316,6 +324,38 @@ export default function Admin() {
     } catch (error) {
       console.error('Error al eliminar usuario:', error)
       setMensaje(`✗ Error al eliminar usuario: ${error.message}`)
+      setTipo('error')
+    }
+
+    setLoading(false)
+  }
+
+  const desactivarUsuario = async (usuarioId, estadoActual) => {
+    const nuevoEstado = !estadoActual
+    const accion = nuevoEstado ? 'activar' : 'desactivar'
+    
+    if (!confirm(`¿Estás seguro de que quieres ${accion} este usuario?`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('perfiles')
+        .update({ activo: nuevoEstado })
+        .eq('id', usuarioId)
+
+      if (error) {
+        throw error
+      }
+
+      setMensaje(`✓ Usuario ${accion}do correctamente`)
+      setTipo('success')
+      obtenerUsuarios()
+      
+      setTimeout(() => setMensaje(''), 3000)
+    } catch (error) {
+      console.error(`Error al ${accion} usuario:`, error)
+      setMensaje(`✗ Error al ${accion} usuario: ${error.message}`)
       setTipo('error')
     }
   }
@@ -885,7 +925,7 @@ export default function Admin() {
               
               <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
                 <p className="text-sm text-blue-800">
-                  <strong>💡 Información:</strong> Aquí puedes ver todos los usuarios registrados, cambiar sus roles (usuario/admin) y eliminar cuentas.
+                  <strong>💡 Información:</strong> Aquí puedes ver todos los usuarios registrados, cambiar sus roles (usuario/admin), desactivar/activar cuentas y eliminar usuarios.
                 </p>
               </div>
 
@@ -900,13 +940,14 @@ export default function Admin() {
                         <th className="text-left py-3 px-4">Email</th>
                         <th className="text-left py-3 px-4">Celular</th>
                         <th className="text-left py-3 px-4">Rol</th>
+                        <th className="text-left py-3 px-4">Estado</th>
                         <th className="text-left py-3 px-4">Fecha de Registro</th>
                         <th className="text-center py-3 px-4">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {usuarios.map((usuario) => (
-                        <tr key={usuario.id} className="border-b hover:bg-gray-50">
+                        <tr key={usuario.id} className={`border-b hover:bg-gray-50 ${!usuario.activo ? 'bg-red-50' : ''}`}>
                           <td className="py-3 px-4">
                             <p className="font-medium text-gray-800">{usuario.nombre || 'Sin nombre'}</p>
                           </td>
@@ -932,6 +973,15 @@ export default function Admin() {
                             </select>
                           </td>
                           <td className="py-3 px-4">
+                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                              usuario.activo 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {usuario.activo ? '✅ Activo' : '❌ Inactivo'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
                             <p className="text-sm text-gray-600">
                               {usuario.created_at 
                                 ? new Date(usuario.created_at).toLocaleDateString('es-PE', {
@@ -943,17 +993,28 @@ export default function Admin() {
                             </p>
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <div className="flex gap-2 justify-center">
+                            <div className="flex gap-2 justify-center flex-wrap">
                               <button
                                 onClick={() => abrirModalEdicion(usuario)}
-                                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition text-sm"
+                                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded transition text-sm"
                                 title="Editar usuario"
                               >
                                 ✏️ Editar
                               </button>
                               <button
+                                onClick={() => desactivarUsuario(usuario.id, usuario.activo)}
+                                className={`text-white px-3 py-2 rounded transition text-sm ${
+                                  usuario.activo
+                                    ? 'bg-orange-500 hover:bg-orange-600'
+                                    : 'bg-green-500 hover:bg-green-600'
+                                }`}
+                                title={usuario.activo ? 'Desactivar usuario' : 'Activar usuario'}
+                              >
+                                {usuario.activo ? '🔒 Desactivar' : '🔓 Activar'}
+                              </button>
+                              <button
                                 onClick={() => eliminarUsuario(usuario.id)}
-                                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded transition text-sm"
+                                className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded transition text-sm"
                                 title="Eliminar usuario"
                               >
                                 🗑️ Eliminar

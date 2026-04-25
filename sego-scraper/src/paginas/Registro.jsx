@@ -19,7 +19,24 @@ export default function Registro() {
     setError('')
     setMensaje('')
 
+    console.log('=== INICIANDO REGISTRO ===');
+    console.log('Nombre:', nombre);
+    console.log('Email:', email);
+    console.log('Celular:', celular);
+
     // Validaciones
+    if (!nombre || !nombre.trim()) {
+      setError('El nombre es requerido')
+      setLoading(false)
+      return
+    }
+
+    if (!celular || !celular.trim()) {
+      setError('El celular es requerido')
+      setLoading(false)
+      return
+    }
+
     if (password !== confirmPassword) {
       setError('Las contraseñas no coinciden')
       setLoading(false)
@@ -33,6 +50,8 @@ export default function Registro() {
     }
 
     try {
+      console.log('1. Registrando usuario en Supabase Auth...');
+      
       // Registrar usuario en Supabase Auth
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
@@ -45,30 +64,48 @@ export default function Registro() {
       })
 
       if (signUpError) {
+        console.error('❌ Error en Auth:', signUpError);
         setError(signUpError.message)
         setLoading(false)
         return
       }
 
+      console.log('✅ Usuario creado en Auth:', data.user?.id);
+
       if (data.user) {
-        // Crear perfil de usuario con rol 'usuario', nombre, celular, email y activo=true
-        const { error: perfilError } = await supabase
+        console.log('2. Creando perfil en tabla perfiles...');
+        console.log('Datos a insertar:', {
+          id: data.user.id,
+          rol: 'usuario',
+          nombre: nombre.trim(),
+          celular: celular.trim(),
+          email: email.trim(),
+          activo: true
+        });
+
+        // Crear o actualizar perfil de usuario con rol 'usuario', nombre, celular, email y activo=true
+        const { data: perfilData, error: perfilError } = await supabase
           .from('perfiles')
-          .insert([
+          .upsert([
             {
               id: data.user.id,
               rol: 'usuario',
-              nombre: nombre,
-              celular: celular,
-              email: email,
+              nombre: nombre.trim(),
+              celular: celular.trim(),
+              email: email.trim(),
               activo: true
             }
-          ])
+          ], { onConflict: 'id' })
+          .select()
 
         if (perfilError) {
-          console.error('Error al crear perfil:', perfilError)
+          console.error('❌ Error al crear perfil:', perfilError);
+          setError(`Error al crear perfil: ${perfilError.message}`)
+          setLoading(false)
+          return
         }
 
+        console.log('✅ Perfil creado correctamente:', perfilData);
         setMensaje('¡Registro exitoso! Redirigiendo a la tienda...')
         
         // Redirigir a la tienda después de 2 segundos
@@ -77,7 +114,7 @@ export default function Registro() {
         }, 2000)
       }
     } catch (error) {
-      console.error('Error en registro:', error)
+      console.error('❌ Error en registro:', error)
       setError('Error al registrar usuario')
     }
 

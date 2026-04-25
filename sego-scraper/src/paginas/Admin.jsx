@@ -304,7 +304,7 @@ export default function Admin() {
   }
 
   const eliminarUsuario = async (usuarioId) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer y eliminará todos sus datos.')) {
+    if (!confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer y eliminará todos sus datos de Supabase Auth y de la base de datos.')) {
       return
     }
 
@@ -312,25 +312,28 @@ export default function Admin() {
     setMensaje('')
 
     try {
-      // Primero, eliminar de la tabla perfiles
-      const { error: perfilError } = await supabase
-        .from('perfiles')
-        .delete()
-        .eq('id', usuarioId)
+      console.log('Eliminando usuario:', usuarioId);
+      
+      // Usar la función RPC para eliminar el usuario completamente
+      const { data, error } = await supabase
+        .rpc('delete_user_account', { user_id: usuarioId })
 
-      if (perfilError) {
-        throw perfilError
+      if (error) {
+        console.error('Error en RPC:', error);
+        throw error
       }
 
-      // Luego, eliminar de Supabase Auth
-      // Nota: Esto requiere que el usuario sea admin o que uses una función RPC
-      // Por ahora, solo eliminamos de perfiles
-      
-      setMensaje('✓ Usuario eliminado correctamente')
-      setTipo('success')
-      obtenerUsuarios()
-      
-      setTimeout(() => setMensaje(''), 3000)
+      console.log('Resultado de eliminación:', data);
+
+      if (data && data.success) {
+        setMensaje('✓ Usuario eliminado correctamente de Auth y Base de Datos')
+        setTipo('success')
+        obtenerUsuarios()
+        
+        setTimeout(() => setMensaje(''), 3000)
+      } else {
+        throw new Error(data?.message || 'Error desconocido al eliminar usuario')
+      }
     } catch (error) {
       console.error('Error al eliminar usuario:', error)
       setMensaje(`✗ Error al eliminar usuario: ${error.message}`)

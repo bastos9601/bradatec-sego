@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../supabase/client'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../componentes/Navbar'
+import Toast from '../componentes/Toast'
 
 export default function Admin() {
   const [loading, setLoading] = useState(false)
   const [mensaje, setMensaje] = useState('')
   const [tipo, setTipo] = useState('')
+  const [toastMensaje, setToastMensaje] = useState('')
+  const [toastTipo, setToastTipo] = useState('')
   const [productos, setProductos] = useState([])
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
   const [nuevoProducto, setNuevoProducto] = useState({
@@ -157,6 +160,13 @@ export default function Admin() {
       }
 
       setPedidos(data || [])
+      
+      // Mostrar notificación si hay pedidos pendientes
+      const pedidosPendientes = (data || []).filter(p => p.estado === 'pendiente');
+      if (pedidosPendientes.length > 0) {
+        setToastMensaje(`📦 Tienes ${pedidosPendientes.length} pedido${pedidosPendientes.length > 1 ? 's' : ''} pendiente${pedidosPendientes.length > 1 ? 's' : ''}`);
+        setToastTipo('pedido');
+      }
     } catch (error) {
       console.error('Error al obtener pedidos:', error)
     }
@@ -660,6 +670,14 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Navbar />
+      
+      {/* Toast Notification */}
+      <Toast 
+        mensaje={toastMensaje} 
+        tipo={toastTipo} 
+        onClose={() => setToastMensaje('')}
+        duracion={6000}
+      />
       
       <div className="container mx-auto px-4 py-8">
         <h2 className="text-3xl font-bold mb-6 text-gray-800">

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import puppeteer from 'puppeteer';
 import { createClient } from '@supabase/supabase-js';
+import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -620,8 +621,8 @@ async function ejecutarScraping(username, password, userId) {
         nombreMap.set(nombreNormalizado, true);
         productosUnicos.push({
           ...prod,
-          // Generar ID único basado en nombre normalizado
-          id: nombreNormalizado.replace(/[^a-z0-9]/gi, '-').substring(0, 100)
+          // Generar ID único usando UUID v4
+          id: uuidv4()
         });
       }
     }

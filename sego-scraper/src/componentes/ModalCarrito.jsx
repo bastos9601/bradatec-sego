@@ -1,5 +1,5 @@
-export default function ModalCarrito({ producto, moneda, tipoCambio, totalCarrito, totalItems, onClose, onContinuar, onVerCarrito }) {
-  const simboloMoneda = moneda === 'PEN' ? 'S/' : '$';
+export default function ModalCarrito({ producto, moneda, tipoCambio, totalCarrito, totalItems, onClose, onContinuar, onVerCarrito, mostrarPrecio = true }) {
+  const simboloMoneda = moneda === 'PEN' ? 'S/' : '$'
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -42,9 +42,11 @@ export default function ModalCarrito({ producto, moneda, tipoCambio, totalCarrit
             <p className="text-gray-600 text-sm mb-2">
               Existen {totalItems} {totalItems === 1 ? 'artículo' : 'artículos'} en su carrito.
             </p>
-            <p className="text-lg font-semibold text-gray-800 mb-1">
-              Total del carrito: <span className="text-blue-600">{simboloMoneda} {totalCarrito.toFixed(2)}</span>
-            </p>
+            {mostrarPrecio && (
+              <p className="text-lg font-semibold text-gray-800 mb-1">
+                Total del carrito: <span className="text-blue-600">{simboloMoneda} {totalCarrito.toFixed(2)}</span>
+              </p>
+            )}
           </div>
 
           {/* Producto agregado */}

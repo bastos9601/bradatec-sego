@@ -367,7 +367,7 @@ export default function Tienda() {
           {/* Header principal */}
           <div className="flex justify-between items-center">
             <h1 className="text-lg md:text-2xl font-bold cursor-pointer" onClick={() => navigate('/')}>
-              bradatec
+              Bradatec
             </h1>
             
             {/* Botones de usuario en desktop */}
@@ -794,6 +794,7 @@ export default function Tienda() {
           onClose={cerrarModal}
           onContinuar={continuarComprando}
           onVerCarrito={verCarrito}
+          mostrarPrecio={!!usuario}
         />
       )}
 

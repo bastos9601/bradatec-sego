@@ -189,21 +189,23 @@ export default function ProductoCard({ producto, moneda, tipoCambio, onAgregarCa
               )}
 
               {/* Precios */}
-              <div className="mb-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-600">
-                <div className="mb-3">
-                  <p className="text-sm text-gray-600">Precio con IGV</p>
-                  <p className="text-2xl font-bold text-blue-600">
-                    {simboloMoneda} {precioConvertido.toFixed(2)}
-                  </p>
-                </div>
-                {moneda === 'PEN' && tipoCambio && (
-                  <div className="text-xs text-gray-500">
-                    Precio original: $ {precioNumerico.toFixed(2)}
-                    <br />
-                    Tipo de cambio: 1 USD = S/ {tipoCambio.toFixed(2)}
+              {mostrarPrecio && (
+                <div className="mb-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-600">
+                  <div className="mb-3">
+                    <p className="text-sm text-gray-600">Precio con IGV</p>
+                    <p className="text-2xl font-bold text-blue-600">
+                      {simboloMoneda} {precioConvertido.toFixed(2)}
+                    </p>
                   </div>
-                )}
-              </div>
+                  {moneda === 'PEN' && tipoCambio && (
+                    <div className="text-xs text-gray-500">
+                      Precio original: $ {precioNumerico.toFixed(2)}
+                      <br />
+                      Tipo de cambio: 1 USD = S/ {tipoCambio.toFixed(2)}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Botón de agregar al carrito */}
               {mostrarPrecio && (

@@ -649,12 +649,47 @@ async function ejecutarScraping(username, password, userId) {
     let productosInsertados = 0;
     let erroresInsercion = 0;
 
+    console.log(`\n💾 Limpiando duplicados por SKU antes de insertar...`);
+
+    // 🔥 FUNCIÓN: Limpiar duplicados por SKU dentro de cada lote
+    const limpiarProductosPorSKU = (productos) => {
+      const mapa = new Map();
+      
+      for (const p of productos) {
+        // Convertir "SIN SKU" a null (PostgreSQL permite múltiples NULL en UNIQUE)
+        const sku = (p.sku === 'SIN SKU' || !p.sku) ? null : p.sku;
+        
+        // Si no tiene SKU válido, saltarlo (opcional)
+        if (!sku) continue;
+        
+        // Sobrescribir duplicados (mantiene el último)
+        mapa.set(sku, {
+          ...p,
+          sku: sku
+        });
+      }
+      
+      return Array.from(mapa.values());
+    };
+
+    // Limpiar todos los productos antes de insertar
+    const productosLimpios = limpiarProductosPorSKU(productosUnicos);
+    
+    // 🧪 DEBUG: Mostrar duplicados encontrados
+    const duplicadosPorSKU = productosUnicos.filter((p, i, arr) => 
+      arr.findIndex(x => x.sku === p.sku) !== i
+    );
+    
+    console.log(`   ✓ Productos antes de limpiar: ${productosUnicos.length}`);
+    console.log(`   ⚠️ Duplicados por SKU encontrados: ${duplicadosPorSKU.length}`);
+    console.log(`   ✓ Productos después de limpiar: ${productosLimpios.length}`);
+
     console.log(`\n💾 Insertando en Supabase (modo masivo)...`);
 
-    for (let i = 0; i < productosUnicos.length; i += tamanoLote) {
-      const lote = productosUnicos.slice(i, i + tamanoLote);
+    for (let i = 0; i < productosLimpios.length; i += tamanoLote) {
+      const lote = productosLimpios.slice(i, i + tamanoLote);
       const numeroLote = Math.floor(i / tamanoLote) + 1;
-      const totalLotes = Math.ceil(productosUnicos.length / tamanoLote);
+      const totalLotes = Math.ceil(productosLimpios.length / tamanoLote);
       
       console.log(`📦 Insertando lote ${numeroLote}/${totalLotes} (${lote.length} productos)...`);
 
@@ -683,8 +718,10 @@ async function ejecutarScraping(username, password, userId) {
     
     console.log(`\n✅ SCRAPING COMPLETADO`);
     console.log(`   📦 Total encontrados en Sego: ${todosLosProductos.length}`);
-    console.log(`   ✓ Productos únicos (sin duplicados): ${productosUnicos.length}`);
-    console.log(`   ⚠️ Duplicados descartados: ${productosDuplicados.length}`);
+    console.log(`   ✓ Productos únicos (por nombre): ${productosUnicos.length}`);
+    console.log(`   ⚠️ Duplicados por nombre descartados: ${productosDuplicados.length}`);
+    console.log(`   ⚠️ Duplicados por SKU encontrados: ${duplicadosPorSKU.length}`);
+    console.log(`   ✓ Productos limpios (sin duplicados SKU): ${productosLimpios.length}`);
     console.log(`   ✓ Insertados/Actualizados en BD: ${productosInsertados}`);
     
     if (erroresInsercion > 0) {

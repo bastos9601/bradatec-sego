@@ -662,7 +662,7 @@ async function ejecutarScraping(username, password, userId) {
         const { error } = await supabase
           .from('productos')
           .upsert(lote, { 
-            onConflict: 'id',
+            onConflict: 'sku',
             ignoreDuplicates: false
           });
 
@@ -671,7 +671,7 @@ async function ejecutarScraping(username, password, userId) {
           erroresInsercion++;
         } else {
           productosInsertados += lote.length;
-          console.log(`✅ Lote ${numeroLote} insertado correctamente (${lote.length} productos)`);
+          console.log(`✅ Lote ${numeroLote} insertado/actualizado correctamente (${lote.length} productos)`);
         }
       } catch (e) {
         console.error(`❌ Error al insertar lote ${numeroLote}:`, e.message);

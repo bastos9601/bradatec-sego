@@ -5,7 +5,9 @@ import ProductoCard from '../componentes/ProductoCard'
 import ModalCarrito from '../componentes/ModalCarrito'
 import CarritoSidebar from '../componentes/CarritoSidebar'
 import ModalCheckout from '../componentes/ModalCheckout'
+import Toast from '../componentes/Toast'
 import { obtenerTipoCambioAPI } from '../config/api'
+import { User, ShoppingBag, Edit, Lock, LogOut, ChevronDown, Search, Folder, RefreshCw, ShoppingCart, X } from 'lucide-react'
 
 export default function Tienda() {
   const [productos, setProductos] = useState([])
@@ -29,6 +31,9 @@ export default function Tienda() {
   const [usuario, setUsuario] = useState(null) // Usuario autenticado
   const [esAdmin, setEsAdmin] = useState(false) // Si el usuario es admin
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false) // Menú móvil
+  const [perfilDropdownAbierto, setPerfilDropdownAbierto] = useState(false) // Dropdown de perfil
+  const [toastMensaje, setToastMensaje] = useState('') // Toast de notificación
+  const [toastTipo, setToastTipo] = useState('') // Tipo de toast
   const navigate = useNavigate()
 
   // Guardar carrito en localStorage cada vez que cambie
@@ -50,6 +55,89 @@ export default function Tienda() {
     return () => clearInterval(intervalo)
   }, [])
 
+  // Polling para detectar cambios en pedidos
+  useEffect(() => {
+    if (!usuario) return
+
+    console.log('🔔 Iniciando polling de cambios de pedidos para usuario:', usuario.id)
+    
+    // Guardar los estados anteriores de los pedidos
+    let estadosPedidosAnteriores = {}
+
+    // Polling: verificar cambios cada 3 segundos
+    const intervaloPolling = setInterval(async () => {
+      try {
+        const { data: pedidos, error } = await supabase
+          .from('pedidos')
+          .select('id, estado')
+          .eq('usuario_id', usuario.id)
+
+        if (error) {
+          console.error('❌ Error al obtener pedidos:', error)
+          return
+        }
+
+        console.log('📬 Verificando pedidos:', pedidos.length)
+
+        // Verificar si algún pedido cambió de estado
+        pedidos.forEach((pedido) => {
+          const estadoAnterior = estadosPedidosAnteriores[pedido.id]
+          const estadoNuevo = pedido.estado
+
+          if (estadoAnterior && estadoAnterior !== estadoNuevo) {
+            console.log('✅ Estado cambió de', estadoAnterior, 'a', estadoNuevo)
+            
+            const estadoEmoji = {
+              pendiente: '⏳',
+              procesando: '⚙️',
+              enviado: '🚚',
+              entregado: '✅',
+              cancelado: '❌'
+            }
+
+            const estadoMensaje = {
+              pendiente: 'Tu pedido está pendiente de confirmación',
+              procesando: 'Tu pedido está siendo procesado',
+              enviado: 'Tu pedido ha sido enviado y está en camino',
+              entregado: 'Tu pedido ha sido entregado. ¡Gracias por tu compra!',
+              cancelado: 'Tu pedido ha sido cancelado'
+            }
+
+            const emoji = estadoEmoji[estadoNuevo] || '📦'
+            const mensaje = estadoMensaje[estadoNuevo] || 'Tu pedido ha sido actualizado'
+            
+            console.log('🎉 Mostrando toast:', emoji, mensaje)
+            setToastMensaje(`${emoji} ${mensaje}`)
+            setToastTipo('pedido')
+          }
+
+          // Actualizar el estado anterior
+          estadosPedidosAnteriores[pedido.id] = estadoNuevo
+        })
+      } catch (error) {
+        console.error('❌ Error en polling:', error)
+      }
+    }, 3000) // Verificar cada 3 segundos
+
+    return () => {
+      console.log('🔌 Deteniendo polling')
+      clearInterval(intervaloPolling)
+    }
+  }, [usuario])
+
+  // Auto-cerrar Toast después de 6 segundos
+  useEffect(() => {
+    if (!toastMensaje) return
+
+    console.log('⏱️ Toast mostrado, se cerrará en 6 segundos')
+    const timeout = setTimeout(() => {
+      console.log('⏱️ Cerrando toast automáticamente')
+      setToastMensaje('')
+    }, 6000)
+
+    return () => clearTimeout(timeout)
+  }, [toastMensaje])
+
   const verificarUsuario = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     setUsuario(user)
@@ -58,7 +146,7 @@ export default function Tienda() {
       // Verificar si el usuario es admin
       const { data: perfil, error } = await supabase
         .from('perfiles')
-        .select('rol')
+        .select('rol, nombre')
         .eq('id', user.id)
         .single()
       
@@ -72,6 +160,34 @@ export default function Tienda() {
       console.log('==============================')
       
       setEsAdmin(perfil?.rol === 'admin')
+      
+      // Obtener el último pedido del usuario
+      const { data: pedidos } = await supabase
+        .from('pedidos')
+        .select('id, estado')
+        .eq('usuario_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      // Mostrar toast de bienvenida
+      const nombreUsuario = perfil?.nombre || user.email.split('@')[0]
+      
+      if (pedidos && pedidos.length > 0) {
+        const ultimoPedido = pedidos[0]
+        const estadoEmoji = {
+          pendiente: '⏳',
+          procesando: '⚙️',
+          enviado: '🚚',
+          entregado: '✅',
+          cancelado: '❌'
+        }
+        
+        const emoji = estadoEmoji[ultimoPedido.estado] || '📦'
+        setToastMensaje(`👋 ¡Bienvenido ${nombreUsuario}! ${emoji} Tu pedido está ${ultimoPedido.estado}`)
+      } else {
+        setToastMensaje(`👋 ¡Bienvenido ${nombreUsuario}!`)
+      }
+      setToastTipo('bienvenida')
     } else {
       setEsAdmin(false)
       console.log('Usuario actual: No autenticado')
@@ -232,11 +348,28 @@ export default function Tienda() {
       {/* Navbar Pública */}
       <nav className="bg-blue-600 text-white shadow-lg">
         <div className="container mx-auto px-4 py-3">
+          {/* Toast de notificación de cambio de estado - en la navbar */}
+          {toastMensaje && (
+            <div className="mb-2 flex items-center justify-between bg-gradient-to-r from-purple-500 to-purple-600 text-white px-4 py-3 rounded-lg shadow-xl animate-slideDown border-l-4 border-purple-300">
+              <div className="flex items-center gap-3">
+                <ShoppingBag size={20} />
+                <span className="font-semibold text-sm md:text-base">{toastMensaje}</span>
+              </div>
+              <button
+                onClick={() => setToastMensaje('')}
+                className="text-white hover:text-gray-200 transition ml-4 flex-shrink-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          )}
+          
           {/* Header principal */}
           <div className="flex justify-between items-center">
-            <h1 className="text-lg md:text-2xl font-bold cursor-pointer" onClick={() => navigate('/')}>
-              Bradatec - Catálogo 
-            </h1>
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
+              <img src="/src/assets/bradatec.png" alt="Bradatec" className="h-10 md:h-12 w-auto" />
+              <h1 className="text-lg md:text-2xl font-bold">Bradatec</h1>
+            </div>
             
             {/* Botones de usuario en desktop */}
             <div className="hidden md:flex items-center gap-3">
@@ -279,11 +412,10 @@ export default function Tienda() {
                       className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded transition disabled:opacity-50"
                       title="Actualizar tipo de cambio"
                     >
-                      {cargandoTipoCambio ? '⏳' : '🔄'}
+                      <RefreshCw size={14} className={cargandoTipoCambio ? 'animate-spin' : ''} />
                     </button>
                   </div>
 
-                  <span className="text-sm text-blue-100">{usuario.email}</span>
                   {esAdmin && (
                     <button
                       onClick={() => navigate('/admin')}
@@ -292,12 +424,88 @@ export default function Tienda() {
                       Admin
                     </button>
                   )}
-                  <button
-                    onClick={cerrarSesion}
-                    className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded transition text-sm"
-                  >
-                    Cerrar Sesión
-                  </button>
+                  
+                  {/* Dropdown de Perfil */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setPerfilDropdownAbierto(!perfilDropdownAbierto)}
+                      className="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded transition text-sm flex items-center gap-2"
+                    >
+                      <User size={18} />
+                      Perfil
+                      <ChevronDown size={16} className={`transition ${perfilDropdownAbierto ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {/* Dropdown Menu */}
+                    {perfilDropdownAbierto && (
+                      <div className="absolute right-0 mt-2 w-56 bg-white text-gray-800 rounded-lg shadow-xl z-50">
+                        {/* Header con nombre y email */}
+                        <div className="px-4 py-3 border-b border-gray-200">
+                          <p className="font-semibold text-gray-900">{usuario.email}</p>
+                          <p className="text-xs text-gray-500">Mi Cuenta</p>
+                        </div>
+                        
+                        {/* Opciones del menú */}
+                        <div className="py-2">
+                          <button
+                            onClick={() => {
+                              navigate('/mi-cuenta')
+                              setPerfilDropdownAbierto(false)
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-blue-50 transition flex items-center gap-3"
+                          >
+                            <User size={16} className="text-blue-600" />
+                            Mi Cuenta
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigate('/mis-ordenes')
+                              setPerfilDropdownAbierto(false)
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-blue-50 transition flex items-center gap-3"
+                          >
+                            <ShoppingBag size={16} className="text-blue-600" />
+                            Mis Órdenes
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigate('/editar-perfil')
+                              setPerfilDropdownAbierto(false)
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-blue-50 transition flex items-center gap-3"
+                          >
+                            <Edit size={16} className="text-blue-600" />
+                            Editar Perfil
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigate('/cambiar-contrasena')
+                              setPerfilDropdownAbierto(false)
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-blue-50 transition flex items-center gap-3"
+                          >
+                            <Lock size={16} className="text-blue-600" />
+                            Cambiar Contraseña
+                          </button>
+                        </div>
+                        
+                        {/* Separador */}
+                        <div className="border-t border-gray-200"></div>
+                        
+                        {/* Cerrar sesión */}
+                        <button
+                          onClick={() => {
+                            cerrarSesion()
+                            setPerfilDropdownAbierto(false)
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-red-50 transition flex items-center gap-3 text-red-600 font-semibold"
+                        >
+                          <LogOut size={16} />
+                          Cerrar Sesión
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : (
                 <>
@@ -357,7 +565,7 @@ export default function Tienda() {
                       disabled={cargandoTipoCambio}
                       className="text-xs bg-blue-600 hover:bg-blue-500 px-1 py-1 rounded transition disabled:opacity-50"
                     >
-                      {cargandoTipoCambio ? '⏳' : '🔄'}
+                      <RefreshCw size={12} className={cargandoTipoCambio ? 'animate-spin' : ''} />
                     </button>
                   </div>
                 </div>
@@ -368,7 +576,6 @@ export default function Tienda() {
             <div className="flex flex-wrap gap-2">
               {usuario ? (
                 <>
-                  <span className="text-xs text-blue-100 w-full">{usuario.email}</span>
                   {esAdmin && (
                     <button
                       onClick={() => navigate('/admin')}
@@ -377,12 +584,90 @@ export default function Tienda() {
                       Admin
                     </button>
                   )}
-                  <button
-                    onClick={cerrarSesion}
-                    className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded transition text-xs flex-1"
-                  >
-                    Cerrar Sesión
-                  </button>
+                  
+                  {/* Dropdown de Perfil Móvil */}
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() => setPerfilDropdownAbierto(!perfilDropdownAbierto)}
+                      className="w-full bg-blue-700 hover:bg-blue-800 px-3 py-2 rounded transition text-xs flex items-center justify-center gap-2"
+                    >
+                      <User size={14} />
+                      Perfil
+                      <ChevronDown size={12} className={`transition ${perfilDropdownAbierto ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {/* Dropdown Menu Móvil */}
+                    {perfilDropdownAbierto && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white text-gray-800 rounded-lg shadow-xl z-50">
+                        {/* Header con nombre y email */}
+                        <div className="px-3 py-2 border-b border-gray-200">
+                          <p className="font-semibold text-gray-900 text-xs">{usuario.email}</p>
+                          <p className="text-xs text-gray-500">Mi Cuenta</p>
+                        </div>
+                        
+                        {/* Opciones del menú */}
+                        <div className="py-2">
+                          <button
+                            onClick={() => {
+                              navigate('/mi-cuenta')
+                              setPerfilDropdownAbierto(false)
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 transition flex items-center gap-2 text-xs"
+                          >
+                            <User size={14} className="text-blue-600" />
+                            Mi Cuenta
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigate('/mis-ordenes')
+                              setPerfilDropdownAbierto(false)
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 transition flex items-center gap-2 text-xs"
+                          >
+                            <ShoppingBag size={14} className="text-blue-600" />
+                            Mis Órdenes
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigate('/editar-perfil')
+                              setPerfilDropdownAbierto(false)
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 transition flex items-center gap-2 text-xs"
+                          >
+                            <Edit size={14} className="text-blue-600" />
+                            Editar Perfil
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigate('/cambiar-contrasena')
+                              setPerfilDropdownAbierto(false)
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 transition flex items-center gap-2 text-xs"
+                          >
+                            <Lock size={14} className="text-blue-600" />
+                            Cambiar Contraseña
+                          </button>
+                        </div>
+                        
+                        {/* Separador */}
+                        <div className="border-t border-gray-200"></div>
+                        
+                        {/* Cerrar sesión */}
+                        <button
+                          onClick={() => {
+                            cerrarSesion()
+                            setPerfilDropdownAbierto(false)
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-red-50 transition flex items-center gap-2 text-red-600 font-semibold text-xs"
+                        >
+                          <LogOut size={14} />
+                          Cerrar Sesión
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  
+
                 </>
               ) : (
                 <>
@@ -421,7 +706,10 @@ export default function Tienda() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Búsqueda */}
             <div>
-              <label className="block text-gray-700 font-semibold mb-2 text-sm md:text-base">🔍 Buscar</label>
+              <label className="block text-gray-700 font-semibold mb-2 text-sm md:text-base flex items-center gap-2">
+                <Search size={18} className="text-blue-600" />
+                Buscar
+              </label>
               <input
                 type="text"
                 value={busqueda}
@@ -433,7 +721,10 @@ export default function Tienda() {
 
             {/* Categorías */}
             <div>
-              <label className="block text-gray-700 font-semibold mb-2 text-sm md:text-base">📂 Categoría</label>
+              <label className="block text-gray-700 font-semibold mb-2 text-sm md:text-base flex items-center gap-2">
+                <Folder size={18} className="text-blue-600" />
+                Categoría
+              </label>
               <select
                 value={categoriaSeleccionada}
                 onChange={(e) => setCategoriaSeleccionada(e.target.value)}

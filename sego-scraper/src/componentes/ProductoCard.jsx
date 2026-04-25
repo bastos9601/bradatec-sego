@@ -1,4 +1,8 @@
-export default function ProductoCard({ producto, moneda, tipoCambio, onAgregarCarrito, mostrarPrecio }) {
+import { useState } from 'react'
+
+export default function ProductoCard({ producto, moneda, tipoCambio, onAgregarCarrito, mostrarPrecio, onVerDetalles }) {
+  const [mostrarDetalles, setMostrarDetalles] = useState(false)
+
   // Extraer el precio numérico del string (ej: "$ 154.92" -> 154.92)
   const extraerPrecio = (precioStr) => {
     if (!precioStr) return 0;
@@ -31,6 +35,7 @@ export default function ProductoCard({ producto, moneda, tipoCambio, onAgregarCa
         {/* Botones de acción que aparecen al hacer hover */}
         <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
           <button 
+            onClick={() => setMostrarDetalles(true)}
             className="bg-white hover:bg-blue-600 hover:text-white text-gray-700 p-2 rounded-full shadow-lg transition-colors"
             title="Ver detalles"
           >
@@ -39,26 +44,10 @@ export default function ProductoCard({ producto, moneda, tipoCambio, onAgregarCa
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           </button>
-          <button 
-            className="bg-white hover:bg-red-600 hover:text-white text-gray-700 p-2 rounded-full shadow-lg transition-colors"
-            title="Agregar a favoritos"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-          </button>
-          <button 
-            className="bg-white hover:bg-green-600 hover:text-white text-gray-700 p-2 rounded-full shadow-lg transition-colors"
-            title="Comparar"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          </button>
         </div>
 
         {/* Imagen del producto */}
-        <div className="w-full h-full overflow-hidden">
+        <div className="w-full h-full overflow-hidden cursor-pointer" onClick={() => setMostrarDetalles(true)}>
           {producto.imagen ? (
             <img
               src={producto.imagen}
@@ -136,6 +125,113 @@ export default function ProductoCard({ producto, moneda, tipoCambio, onAgregarCa
           {new Date(producto.created_at).toLocaleDateString('es-PE')}
         </p>
       </div>
+
+      {/* Modal de detalles */}
+      {mostrarDetalles && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="sticky top-0 bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Detalles del Producto</h2>
+              <button
+                onClick={() => setMostrarDetalles(false)}
+                className="text-white hover:text-gray-200 transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Imagen */}
+              <div className="mb-6">
+                <img
+                  src={producto.imagen}
+                  alt={producto.nombre}
+                  className="w-full h-auto max-h-96 object-contain rounded-lg"
+                  onError={(e) => {
+                    e.target.src = 'https://via.placeholder.com/400x300?text=Sin+Imagen'
+                  }}
+                />
+              </div>
+
+              {/* Nombre */}
+              <h1 className="text-3xl font-bold text-gray-800 mb-4">
+                {producto.nombre}
+              </h1>
+
+              {/* Categoría */}
+              {producto.categoria && (
+                <div className="mb-4">
+                  <span className="inline-block bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded-full">
+                    📂 {producto.categoria}
+                  </span>
+                </div>
+              )}
+
+              {/* SKU */}
+              {producto.sku && (
+                <div className="mb-4 p-3 bg-gray-100 rounded-lg">
+                  <p className="text-sm text-gray-600">
+                    <strong>SKU:</strong> <span className="font-mono">{producto.sku}</span>
+                  </p>
+                </div>
+              )}
+
+              {/* Stock */}
+              {producto.stock && (
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600">
+                    <strong>Stock:</strong> <span className="text-green-600 font-semibold">{producto.stock}</span>
+                  </p>
+                </div>
+              )}
+
+              {/* Precios */}
+              <div className="mb-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-600">
+                <div className="mb-3">
+                  <p className="text-sm text-gray-600">Precio con IGV</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {simboloMoneda} {precioConvertido.toFixed(2)}
+                  </p>
+                </div>
+                {moneda === 'PEN' && tipoCambio && (
+                  <div className="text-xs text-gray-500">
+                    Precio original: $ {precioNumerico.toFixed(2)}
+                    <br />
+                    Tipo de cambio: 1 USD = S/ {tipoCambio.toFixed(2)}
+                  </div>
+                )}
+              </div>
+
+              {/* Botón de agregar al carrito */}
+              {mostrarPrecio && (
+                <button
+                  onClick={() => {
+                    onAgregarCarrito(producto)
+                    setMostrarDetalles(false)
+                  }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition mb-3 flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Agregar al Carrito
+                </button>
+              )}
+
+              {/* Botón cerrar */}
+              <button
+                onClick={() => setMostrarDetalles(false)}
+                className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 rounded-lg transition"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@ import cors from 'cors';
 import puppeteer from 'puppeteer';
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
+import slugify from 'slugify';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -531,11 +532,26 @@ async function ejecutarScraping(username, password, userId) {
                 }
               }
               
-              // Extraer SKU
+              // Extraer SKU - Buscar en .tp-product-content p
               let sku = null;
-              const skuEl = el.querySelector('.text-muted');
-              if (skuEl?.textContent?.includes('SKU:')) {
-                sku = skuEl.textContent.replace('SKU:', '').trim();
+              try {
+                const skuEl = el.querySelector('.tp-product-content p');
+                if (skuEl?.textContent?.includes('SKU:')) {
+                  sku = skuEl.textContent
+                    .replace('SKU:', '')
+                    .replace(/"/g, '')
+                    .trim();
+                }
+              } catch (e) {
+                // Si falla, intentar con .text-muted
+                try {
+                  const skuEl = el.querySelector('.text-muted');
+                  if (skuEl?.textContent?.includes('SKU:')) {
+                    sku = skuEl.textContent.replace('SKU:', '').trim();
+                  }
+                } catch (e2) {
+                  sku = null;
+                }
               }
               
               // Extraer stock - buscar dentro de .tp-product-stock-label
@@ -656,10 +672,14 @@ async function ejecutarScraping(username, password, userId) {
       const mapa = new Map();
       
       for (const p of productos) {
-        // Convertir "SIN SKU" a null (PostgreSQL permite múltiples NULL en UNIQUE)
-        const sku = (p.sku === 'SIN SKU' || !p.sku) ? null : p.sku;
+        // Generar SKU si no existe o es "SIN SKU"
+        let sku = p.sku;
+        if (!sku || sku === 'SIN SKU' || sku === '') {
+          // Generar SKU basado en el nombre
+          sku = slugify(p.nombre, { lower: true, strict: true });
+        }
         
-        // Si no tiene SKU válido, saltarlo (opcional)
+        // Si aún no tiene SKU válido, saltarlo
         if (!sku) continue;
         
         // Sobrescribir duplicados (mantiene el último)
